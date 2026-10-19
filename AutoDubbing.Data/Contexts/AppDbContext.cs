@@ -25,13 +25,19 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<AdminUser>(entity =>
         {
-            entity.ToTable("NGUOI_DUNG");
+            entity.ToTable("NGUOI_DUNG", table =>
+                table.HasCheckConstraint("CK_NGUOI_DUNG_trang_thai",
+                    "DATALENGTH([trang_thai]) = 12 AND [trang_thai] COLLATE Latin1_General_100_BIN2 IN ('Active', 'Locked')"));
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).HasColumnName("id");
-            entity.Property(x => x.Username).HasColumnName("ten_dang_nhap");
+            entity.Property(x => x.Username)
+                .HasColumnName("ten_dang_nhap")
+                .HasMaxLength(AdminUser.UsernameMaxLength)
+                .UseCollation("Latin1_General_100_BIN2");
+            entity.HasIndex(x => x.Username).IsUnique();
             entity.Property(x => x.PasswordHash).HasColumnName("mat_khau_hash");
             entity.Property(x => x.FullName).HasColumnName("ho_ten");
-            entity.Property(x => x.Status).HasColumnName("trang_thai");
+            entity.Property(x => x.Status).HasColumnName("trang_thai").HasMaxLength(6);
         });
 
         modelBuilder.Entity<PointOfInterest>(entity =>

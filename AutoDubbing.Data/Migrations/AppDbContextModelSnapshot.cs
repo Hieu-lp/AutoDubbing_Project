@@ -43,17 +43,26 @@ namespace AutoDubbing.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(6)
+                        .HasColumnType("nvarchar(6)")
                         .HasColumnName("trang_thai");
 
                     b.Property<string>("Username")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("ten_dang_nhap");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("ten_dang_nhap")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.HasKey("Id");
 
-                    b.ToTable("NGUOI_DUNG", (string)null);
+                    b.HasIndex("Username")
+                        .IsUnique();
+
+                    b.ToTable("NGUOI_DUNG", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_NGUOI_DUNG_trang_thai", "DATALENGTH([trang_thai]) = 12 AND [trang_thai] COLLATE Latin1_General_100_BIN2 IN ('Active', 'Locked')");
+                        });
                 });
 
             modelBuilder.Entity("AutoDubbing.Data.Entities.PoiAudio", b =>

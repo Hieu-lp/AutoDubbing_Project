@@ -2,4 +2,5 @@
   <Project Path="AutoDubbing.API/AutoDubbing.API.csproj" />
   <Project Path="AutoDubbing.Data/AutoDubbing.Data.csproj" />
   <Project Path="AutoDubbing.Service/AutoDubbing.Service.csproj" />
+  <Project Path="AutoDubbing.Tests/AutoDubbing.Tests.csproj" />
 </Solution>
