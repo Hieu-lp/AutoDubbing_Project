@@ -3,7 +3,11 @@ using AutoDubbing.API.Commands;
 using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Data.Repositories;
+using AutoDubbing.Data.Storage;
+using AutoDubbing.Service.ContentGeneration;
 using AutoDubbing.Service.Authentication;
+using AutoDubbing.Service.Pois;
+using AutoDubbing.Service.Routes;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
@@ -33,12 +37,40 @@ if (args is ["create-admin"])
 
 builder.Services.AddScoped<IAdminAuthenticationService, AdminAuthenticationService>();
 builder.Services.AddAdminJwtAuthentication();
+builder.Services.AddScoped<IPoiReadRepository, PoiReadRepository>();
+builder.Services.AddScoped<IPoiReadService, PoiReadService>();
+builder.Services.AddScoped<IRoutePreviewService, RoutePreviewService>();
+builder.Services.Configure<OrsDirectionsOptions>(builder.Configuration.GetSection(OrsDirectionsOptions.SectionName));
+builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(client =>
+    client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+
+builder.Services.AddScoped<IContentGenerationRepository, ContentGenerationRepository>();
+builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
+builder.Services.AddSingleton<GenerationCoordinator>();
+builder.Services.AddSingleton<IGenerationDelay, GenerationDelay>();
+builder.Services.AddSingleton<IAudioCache>(new LocalAudioCache(
+    Path.Combine(builder.Environment.ContentRootPath, "artifacts", "audio-cache")));
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.Configure<SupabaseOptions>(builder.Configuration.GetSection("Supabase"));
+builder.Services.AddHttpClient<IContentProvider, GeminiContentProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddHttpClient<IAudioStorage, SupabaseAudioStorage>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// Response lỗi không tiết lộ exception, stack trace hoặc cấu hình, kể cả trong Development.
+app.UseExceptionHandler(handler => handler.Run(context => Results.Problem(
+    statusCode: StatusCodes.Status500InternalServerError,
+    title: "Không thể xử lý yêu cầu.").ExecuteAsync(context)));
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -2,6 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
+using AutoDubbing.Data.Storage;
+using AutoDubbing.Service.ContentGeneration;
+using AutoDubbing.Service.Routes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -23,11 +26,16 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
     public string SigningKey { get; } = signingKeyOverride
         ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
     public string Password { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+    public string? RoutingApiKey { get; init; }
+    public bool GenerationConfigured { get; init; }
+    public ContentGenerationHttpStub GenerationHttp { get; } = new();
+    public OrsHttpStub RoutingHttp { get; } = new();
+    public CapturingLoggerProvider CapturedLogs { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
+        builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole().AddProvider(CapturedLogs));
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -35,11 +43,28 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
                 ["Jwt:Issuer"] = "AutoDubbing.Tests",
                 ["Jwt:Audience"] = "AutoDubbing.Tests.Admin",
                 ["Jwt:LifetimeMinutes"] = "30",
-                ["Jwt:SigningKey"] = omitSigningKey ? null : SigningKey
+                ["Jwt:SigningKey"] = omitSigningKey ? null : SigningKey,
+                ["OpenRouteService:ApiKey"] = RoutingApiKey,
+                ["OpenRouteService:TimeoutSeconds"] = "1",
+                ["Gemini:ApiKey"] = GenerationConfigured ? "fixture-gemini-key" : null,
+                ["Gemini:MaxRetries"] = "0",
+                ["Supabase:ProjectUrl"] = GenerationConfigured ? "https://fixture.supabase.co" : null,
+                ["Supabase:Bucket"] = GenerationConfigured ? "fixture-audio" : null,
+                ["Supabase:UploadKey"] = GenerationConfigured ? "sb_secret_fixture_key" : null
             }));
 
         builder.ConfigureServices(services =>
         {
+            services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>()
+                .ConfigurePrimaryHttpMessageHandler(() => RoutingHttp);
+            services.AddHttpClient<IContentProvider, GeminiContentProvider>()
+                .ConfigurePrimaryHttpMessageHandler(() => GenerationHttp);
+            services.AddHttpClient<IAudioStorage, SupabaseAudioStorage>()
+                .ConfigurePrimaryHttpMessageHandler(() => GenerationHttp);
+            services.RemoveAll<IAudioCache>();
+            services.AddSingleton<IAudioCache>(new MemoryAudioCache());
+            services.RemoveAll<IGenerationDelay>();
+            services.AddSingleton<IGenerationDelay>(new RecordingGenerationDelay());
             connection.Open();
             connection.CreateCollation("Latin1_General_100_BIN2", StringComparer.Ordinal.Compare);
             connection.CreateFunction<string, int>("DATALENGTH", value => Encoding.Unicode.GetByteCount(value));
