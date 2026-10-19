@@ -1,27 +1,34 @@
 name: .NET CI Pipeline
 
-# Kịch bản này sẽ tự động chạy mỗi khi có code mới đẩy lên nhánh 'main'
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - develop
+      - backend-api
+      - frontend-user-web
+      - frontend-admin-dashboard
+
   pull_request:
-    branches: [ "main" ]
- 
+    branches:
+      - main
+      - develop
+
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest # Chạy trên máy chủ ảo Linux của GitHub
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Tải mã nguồn về máy chủ
-      uses: actions/checkout@v4
+      - name: Tải mã nguồn về máy chủ
+        uses: actions/checkout@v4
 
-    - name: Cài đặt .NET 10 SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
+      - name: Cài đặt .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-    - name: Kiểm tra lỗi cú pháp (Build C#)
-      run: dotnet build
+      - name: Kiểm tra biên dịch backend
+        run: dotnet build
 
-    - name: Kiểm tra đóng gói Docker (Test Dockerfile)
-      run: docker build -t autodubbing-api .
+      - name: Kiểm tra đóng gói Docker
+        run: docker build -t autodubbing-api .
