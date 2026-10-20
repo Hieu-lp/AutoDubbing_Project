@@ -12,6 +12,7 @@ COPY ["AutoDubbingSystem.slnx", "./"]
 COPY ["AutoDubbing.API/AutoDubbing.API.csproj", "AutoDubbing.API/"]
 COPY ["AutoDubbing.Service/AutoDubbing.Service.csproj", "AutoDubbing.Service/"]
 COPY ["AutoDubbing.Data/AutoDubbing.Data.csproj", "AutoDubbing.Data/"]
+COPY ["AutoDubbing.Tests/AutoDubbing.Tests.csproj", "AutoDubbing.Tests/"]
 RUN dotnet restore "AutoDubbingSystem.slnx"
 
 # Sao chép toàn bộ mã nguồn còn lại và tiến hành build
