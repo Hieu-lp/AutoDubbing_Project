@@ -28,7 +28,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Kiểm tra biên dịch backend
-        run: dotnet build
+        run: dotnet build AutoDubbingSystem.slnx --configuration Release
+
+      - name: Chạy kiểm thử backend trên database tách biệt
+        run: dotnet test AutoDubbing.Tests/AutoDubbing.Tests.csproj --configuration Release --no-build --no-restore
 
       - name: Kiểm tra đóng gói Docker
         run: docker build -t autodubbing-api .
