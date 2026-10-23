@@ -82,12 +82,14 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
                 }
                 catch (GenerationException error)
                 {
-                    results.Add(new(language.Code, error.Code == "QuotaExceeded" ? "PausedQuota" : "Failed", textReady, false, error.Code));
+                    results.Add(new(language.Code, error.Code == "QuotaExceeded" ? "PausedQuota" : "Failed", textReady, false,
+                        error.Code, FailureDetails: error.Details));
                     paused = error.Code is "QuotaExceeded" or "GeminiUnauthorized" or "GeminiForbidden" or "GeminiModelUnavailable" or "SourceChanged";
                 }
                 catch (AudioStorageException error)
                 {
-                    results.Add(new(language.Code, error.Code == "SupabaseQuotaExceeded" ? "PausedQuota" : "Failed", textReady, false, error.Code));
+                    results.Add(new(language.Code, error.Code == "SupabaseQuotaExceeded" ? "PausedQuota" : "Failed", textReady, false,
+                        error.Code, StorageFailureDetails: error.Details));
                     paused = true; // Không sinh thêm audio khi storage đang lỗi.
                 }
                 catch (Exception error) when (error is DbUpdateException or System.Data.Common.DbException or IOException or UnauthorizedAccessException)

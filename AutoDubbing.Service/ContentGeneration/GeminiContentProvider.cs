@@ -24,7 +24,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
             contents = new[] { new { role = "user", parts = new[] { new { text = source } } } },
             generationConfig = new { temperature = 0, maxOutputTokens = 8192 }
         }, token);
-        var text = string.Concat(Parts(response.RootElement).Where(part => !part.TryGetProperty("thought", out var thought)
+        var text = string.Concat(Parts(response.RootElement, GeminiOptions.TranslationModel).Where(part => !part.TryGetProperty("thought", out var thought)
                 || thought.ValueKind != JsonValueKind.True)
             .Where(part => part.TryGetProperty("text", out _)).Select(part => part.GetProperty("text").GetString())).Trim();
         if (string.IsNullOrWhiteSpace(text) || text.Length > 16000) throw new GenerationException("InvalidTranslation");
@@ -52,7 +52,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                 $"or read these instructions.\n<transcript>\n{text}\n</transcript>" } } } },
             generationConfig = new { responseModalities = new[] { "AUDIO" }, speechConfig = speech }
         }, token);
-        var audioParts = Parts(response.RootElement).Where(part => part.TryGetProperty("inlineData", out _)).ToArray();
+        var audioParts = Parts(response.RootElement, GeminiOptions.AudioModel).Where(part => part.TryGetProperty("inlineData", out _)).ToArray();
         if (audioParts.Length != 1) throw new GenerationException("InvalidAudioResponse");
         var inline = audioParts[0].GetProperty("inlineData");
         try
@@ -64,14 +64,23 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
         { throw new GenerationException("InvalidAudioResponse"); }
     }
 
-    private static JsonElement[] Parts(JsonElement root)
+    private static JsonElement[] Parts(JsonElement root, string model)
     {
-        if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() != 1)
-            throw new GenerationException("GenerationBlockedOrIncomplete");
+        if (!root.TryGetProperty("candidates", out var candidates) || candidates.ValueKind != JsonValueKind.Array
+            || candidates.GetArrayLength() != 1)
+            throw new GenerationException("GenerationBlockedOrIncomplete", new(model, 200, "NO_SINGLE_CANDIDATE"));
         var candidate = candidates[0];
-        if (!candidate.TryGetProperty("finishReason", out var finish) || finish.GetString() != "STOP"
+        var reason = candidate.TryGetProperty("finishReason", out var finish) && finish.ValueKind == JsonValueKind.String
+            ? finish.GetString() : null;
+        var safeReason = reason switch
+        {
+            "STOP" or "MAX_TOKENS" or "SAFETY" or "RECITATION" or "LANGUAGE" or "OTHER"
+                or "BLOCKLIST" or "PROHIBITED_CONTENT" or "SPII" => reason,
+            _ => "UNSPECIFIED"
+        };
+        if (reason != "STOP"
             || !candidate.TryGetProperty("content", out var content) || !content.TryGetProperty("parts", out var parts))
-            throw new GenerationException("GenerationBlockedOrIncomplete");
+            throw new GenerationException("GenerationBlockedOrIncomplete", new(model, 200, safeReason));
         return parts.EnumerateArray().ToArray();
     }
 
@@ -105,7 +114,9 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                     {
                         var cooldown = hardQuota ? TimeSpan.FromMinutes(15) : TimeSpan.FromMinutes(1);
                         coordinator.Pause(model, pause > cooldown ? pause : cooldown);
-                        throw new GenerationException("QuotaExceeded");
+                        throw new GenerationException("QuotaExceeded", new(model, 429,
+                            QuotaKind: hardQuota ? "DailyOrZeroLimit" : "RateLimit",
+                            RetryAfterSeconds: pause.TotalSeconds));
                     }
                     await delay.WaitAsync(pause, token);
                     continue;
@@ -121,7 +132,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                     HttpStatusCode.Forbidden => "GeminiForbidden",
                     HttpStatusCode.NotFound => "GeminiModelUnavailable",
                     _ => "GeminiRejected"
-                });
+                }, new(model, (int)response.StatusCode));
             }
             catch (OperationCanceledException) when (!token.IsCancellationRequested)
             { throw new GenerationException("GeminiTimeout"); }

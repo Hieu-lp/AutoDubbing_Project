@@ -126,6 +126,35 @@ public class ContentGenerationTests
         Assert.Equal(1, factory.GenerationHttp.AudioCalls);
         Assert.Equal(2, factory.GenerationHttp.UploadCalls);
     }
+
+    [Fact]
+    public async Task Unreadable_uploaded_file_is_not_ready_and_retry_reuses_object_and_cache()
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true };
+        using var client = await Authenticated(factory);
+        var id = await Poi(factory);
+        factory.GenerationHttp.FailNextPublicReadAfterUpload = true;
+        using var first = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
+        var failed = await first.Content.ReadFromJsonAsync<GenerationBatchResult>();
+        Assert.False(failed!.Results[0].AudioReady);
+        Assert.Equal("VerifyingPublicObject", failed.Results[0].StorageFailureDetails?.Stage);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal("Microsoft.EntityFrameworkCore.Sqlite", db.Database.ProviderName);
+        Assert.Equal(0, await db.Audios.CountAsync());
+        using var second = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
+        var completed = await second.Content.ReadFromJsonAsync<GenerationBatchResult>();
+        Assert.True(completed!.Results[0].AudioReady);
+        Assert.Equal(1, factory.GenerationHttp.TranslationCalls);
+        Assert.Equal(1, factory.GenerationHttp.AudioCalls);
+        Assert.Equal(1, factory.GenerationHttp.UploadCalls);
+        Assert.Equal(1, await db.Audios.CountAsync());
+        using var again = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
+        var skipped = await again.Content.ReadFromJsonAsync<GenerationBatchResult>();
+        Assert.Equal("SkippedReady", skipped!.Results[0].Status);
+        Assert.Equal(1, await db.Audios.CountAsync());
+        Assert.Equal(1, factory.GenerationHttp.UploadCalls);
+    }
     [Fact]
     public async Task Endpoint_requires_token_and_rejects_unknown_duplicate_or_oversized_batch()
     {

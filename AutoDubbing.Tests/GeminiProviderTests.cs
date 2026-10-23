@@ -69,6 +69,10 @@ public class GeminiProviderTests
         var error = await Assert.ThrowsAsync<GenerationException>(() => Provider(http, wait)
             .TranslateAsync("Source.", "POI", LanguageCatalog.Find("en")!, default));
         Assert.Equal("QuotaExceeded", error.Code);
+        Assert.Equal("DailyOrZeroLimit", error.Details?.QuotaKind);
+        Assert.Equal(429, error.Details?.HttpStatus);
+        Assert.Equal(GeminiOptions.TranslationModel, error.Details?.Model);
+        Assert.DoesNotContain("secret-test-value", JsonSerializer.Serialize(error.Details));
         Assert.DoesNotContain("secret-test-value", error.ToString());
         Assert.Equal(1, http.Calls);
         Assert.Empty(wait.Delays);
@@ -156,5 +160,44 @@ public class GeminiProviderTests
         var provider = Provider(http, new RecordingGenerationDelay());
         foreach (var language in LanguageCatalog.All) await provider.SpeakAsync("Exact input.", language, default);
         Assert.Equal(15, http.Calls);
+    }
+
+    [Theory]
+    [InlineData("MAX_TOKENS", "MAX_TOKENS")]
+    [InlineData("SAFETY", "SAFETY")]
+    [InlineData("OTHER", "OTHER")]
+    [InlineData("secret-test-value", "UNSPECIFIED")]
+    public async Task Incomplete_tts_keeps_only_allowlisted_diagnostics_and_does_not_retry(string reason, string expected)
+    {
+        var http = new HttpStub((_, _) => new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { candidates = new[] { new {
+                finishReason = reason, finishMessage = "secret-test-value", content = new { parts = new[] {
+                    new { text = "secret-test-value" }
+                } }
+            } } }), Encoding.UTF8, "application/json")
+        });
+        var wait = new RecordingGenerationDelay();
+        var error = await Assert.ThrowsAsync<GenerationException>(() => Provider(http, wait)
+            .SpeakAsync("Exact transcript.", LanguageCatalog.Find("zh-hans")!, default));
+        Assert.Equal("GenerationBlockedOrIncomplete", error.Code);
+        Assert.Equal(expected, error.Details?.FinishReason);
+        Assert.Equal(GeminiOptions.AudioModel, error.Details?.Model);
+        Assert.Equal(200, error.Details?.HttpStatus);
+        Assert.DoesNotContain("secret-test-value", JsonSerializer.Serialize(error.Details));
+        Assert.Equal(1, http.Calls);
+        Assert.Empty(wait.Delays);
+    }
+
+    [Fact]
+    public async Task Rate_quota_is_distinct_from_daily_quota_in_safe_diagnostics()
+    {
+        var http = new HttpStub((_, _) => new(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") });
+        var error = await Assert.ThrowsAsync<GenerationException>(() => Provider(http, new RecordingGenerationDelay(), 0)
+            .SpeakAsync("Exact transcript.", LanguageCatalog.Find("zh-hans")!, default));
+        Assert.Equal("RateLimit", error.Details?.QuotaKind);
+        Assert.Equal(GeminiOptions.AudioModel, error.Details?.Model);
+        Assert.True(error.Details?.RetryAfterSeconds > 0);
+        Assert.Equal(1, http.Calls);
     }
 }
