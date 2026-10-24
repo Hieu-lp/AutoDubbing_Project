@@ -39,6 +39,7 @@ builder.Services.AddScoped<IAdminAuthenticationService, AdminAuthenticationServi
 builder.Services.AddAdminJwtAuthentication();
 builder.Services.AddScoped<IPoiReadRepository, PoiReadRepository>();
 builder.Services.AddScoped<IPoiReadService, PoiReadService>();
+builder.Services.AddScoped<IPoiManagementService, PoiManagementService>();
 builder.Services.AddScoped<IRoutePreviewService, RoutePreviewService>();
 builder.Services.Configure<OrsDirectionsOptions>(builder.Configuration.GetSection(OrsDirectionsOptions.SectionName));
 builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(client =>
@@ -89,4 +90,3 @@ app.Run();
 
 // Cho phép integration test khởi động đúng ứng dụng với database riêng.
 public partial class Program;
-
