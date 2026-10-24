@@ -10,10 +10,13 @@ import {
   loginAdmin,
   saveAdminToken,
   updateAdminPoi,
+  useAdminMockData,
   type AdminPoi,
   type AdminPoiInput,
   type AdminProfile,
 } from './services/adminPoiService';
+import AdminDashboard from './AdminDashboard';
+import { RoutesPage, SessionsPage, TranslationAudioPage } from './AdminWorkflowPages';
 
 type Notice = { kind: 'success' | 'error'; text: string };
 type Filter = 'all' | 'published' | 'hidden';
@@ -327,37 +330,11 @@ export default function AdminApp() {
             {activeSection === 'places' && <button className="admin-button admin-button-primary admin-add-button" onClick={() => setModalPoi(null)}><Icon name="plus" size={18} /><span>Thêm địa điểm</span></button>}
           </section>
 
-          {import.meta.env.DEV && <div className="admin-demo-banner" role="status"><Icon name="shield" size={16} /><span><strong>Chế độ demo local</strong> — dữ liệu mẫu lưu trong trình duyệt, không kết nối database.</span></div>}
+          {useAdminMockData && <div className="admin-demo-banner" role="status"><Icon name="shield" size={16} /><span><strong>Chế độ demo local</strong> — dữ liệu mẫu lưu trong trình duyệt, không kết nối database.</span></div>}
 
           {notice && <div className={`admin-toast ${notice.kind === 'error' ? 'admin-toast-error' : ''}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span className="admin-toast-mark"><Icon name={notice.kind === 'success' ? 'check' : 'close'} size={15} /></span>{notice.text}<button className="admin-icon-button" aria-label="Đóng thông báo" onClick={() => setNotice(null)}><Icon name="close" size={15} /></button></div>}
 
-          {activeSection === 'overview' && <section className="admin-monitoring" aria-label="Dashboard giám sát">
-            <div className="admin-monitoring-note"><Icon name="activity" size={16} /><span>PRD yêu cầu cập nhật số liệu trong ≤ 10 giây. Nguồn giám sát chưa được kết nối; không hiển thị số liệu giả lập.</span></div>
-            <section className="admin-monitoring-section">
-              <header className="admin-monitoring-heading"><div><h2>Tình trạng hệ thống</h2><p>Trạng thái ứng dụng, cơ sở dữ liệu và pipeline.</p></div><span className="admin-monitoring-unavailable">Chưa có dữ liệu</span></header>
-              <div className="admin-health-grid">{['Ứng dụng', 'Cơ sở dữ liệu', 'Pipeline'].map((component) => (
-                <article className="admin-health-card" key={component}><span className="admin-health-dot" /><div><strong>{component}</strong><span>Chưa có dữ liệu trạng thái</span></div></article>
-              ))}</div>
-              <div className="admin-monitoring-stats">
-                {['Tác vụ đang chờ', 'Tác vụ đang xử lý', 'Tác vụ lỗi', 'Tỷ lệ lỗi', 'Thời gian phản hồi'].map((metric) => (
-                  <article className="admin-monitoring-stat" key={metric}><span>{metric}</span><strong>—</strong></article>
-                ))}
-              </div>
-              <article className="admin-monitoring-panel"><header><h3>Lỗi gần đây</h3><span>Nhật ký hệ thống</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lỗi để hiển thị.</div></article>
-            </section>
-            <section className="admin-monitoring-section">
-              <header className="admin-monitoring-heading"><div><h2>Mức sử dụng</h2><p>Số liệu sử dụng theo thời gian thực.</p></div><span className="admin-monitoring-unavailable">Chưa có dữ liệu</span></header>
-              <div className="admin-monitoring-stats admin-usage-stats">
-                {['Người dùng đang hoạt động', 'Lượt nghe tự phát', 'Lượt nghe do chạm POI', 'Lộ trình được chọn nhiều nhất'].map((metric) => (
-                  <article className="admin-monitoring-stat" key={metric}><span>{metric}</span><strong>—</strong></article>
-                ))}
-              </div>
-              <div className="admin-monitoring-panels">
-                <article className="admin-monitoring-panel"><header><h3>Lượt nghe theo POI</h3><span>Nhật ký lượt nghe</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lượt nghe theo POI.</div></article>
-                <article className="admin-monitoring-panel"><header><h3>Lượt nghe theo ngôn ngữ</h3><span>Ngôn ngữ audio</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lượt nghe theo ngôn ngữ.</div></article>
-              </div>
-            </section>
-          </section>}
+          {activeSection === 'overview' && <AdminDashboard token={token} adminId={admin.id} />}
 
           {activeSection === 'places' && <>
             <section className="admin-stat-grid" aria-label="Thống kê địa điểm">
@@ -413,23 +390,9 @@ export default function AdminApp() {
             </section>
           </>}
 
-          {activeSection === 'pipeline' && <section className="admin-feature-placeholder">
-            <div className="admin-feature-icon"><Icon name="globe" size={22} /></div>
-            <h2>Trạng thái bản dịch và audio theo POI</h2>
-            <div className="admin-feature-empty">Chưa có dữ liệu pipeline để hiển thị.</div>
-          </section>}
-
-          {activeSection === 'routes' && <section className="admin-feature-placeholder">
-            <div className="admin-feature-icon"><Icon name="route" size={22} /></div>
-            <h2>Quản lý lộ trình</h2>
-            <div className="admin-feature-empty">Chưa có dữ liệu lộ trình để hiển thị.</div>
-          </section>}
-
-          {activeSection === 'sessions' && <section className="admin-feature-placeholder">
-            <div className="admin-feature-icon"><Icon name="grid" size={22} /></div>
-            <h2>Quản lý session</h2>
-            <div className="admin-feature-empty">Chưa có dữ liệu session để hiển thị.</div>
-          </section>}
+          {activeSection === 'pipeline' && <TranslationAudioPage pois={pois} />}
+          {activeSection === 'routes' && <RoutesPage pois={pois} />}
+          {activeSection === 'sessions' && <SessionsPage pois={pois} />}
 
           <footer className="admin-page-footer">© {new Date().getFullYear()} VoiceMap <span>•</span> Quản lý địa điểm văn hóa</footer>
         </div>

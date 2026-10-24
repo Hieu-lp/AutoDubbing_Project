@@ -1,0 +1,28 @@
+.admin-dashboard-refresh{min-height:36px;padding:0 11px;font-size:10px}
+.admin-monitoring-note{justify-content:space-between;flex-wrap:wrap}
+.admin-health-dot.health-online{border-color:#8ac9a8;background:#4cae77}
+.admin-health-dot.health-warning{border-color:#edcc84;background:#e4ac42}
+.admin-health-dot.health-offline{border-color:#e9aaa4;background:#d96860}
+.admin-health-dot.health-unknown{border-color:#aab3c0;background:#eef0f3}
+.admin-dashboard-error-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #f0d8d5;border-radius:7px;background:#fff6f4;color:#a44e46;font-size:11px;line-height:1.5}
+.admin-dashboard-error-banner button{min-height:36px;padding:0 10px;border:1px solid #ebd0cc;border-radius:5px;background:#fff;color:#a44e46;font-size:10px}
+.admin-dashboard-state{padding:32px;border:1px dashed #dfe4eb;border-radius:8px;background:#fff;color:#788495;font-size:12px;text-align:center}
+.admin-dashboard-errors{margin-top:12px}
+.admin-dashboard-error-list,.admin-dashboard-breakdown{margin:0;padding:0;list-style:none}
+.admin-dashboard-error-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px 14px;border-top:1px solid #eff1f4}
+.admin-dashboard-error-mark{width:21px;height:21px;display:grid;place-items:center;border-radius:50%;background:#fff0ed;color:#bb5d51;font-size:11px;font-weight:700}
+.admin-dashboard-error-list li>div{min-width:0}
+.admin-dashboard-error-list strong{color:#4c596c;font-size:10px}
+.admin-dashboard-error-list p{margin:4px 0 0;color:#788495;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.admin-dashboard-error-list time{color:#929cab;font-size:9px;white-space:nowrap}
+.admin-dashboard-panels,.admin-monitoring-panels{align-items:start}
+.admin-dashboard-breakdown{padding:5px 13px 10px}
+.admin-dashboard-breakdown li{min-height:36px;display:grid;grid-template-columns:minmax(80px,1fr) minmax(50px,1.4fr) 36px;align-items:center;gap:10px;border-bottom:1px solid #f0f2f5}
+.admin-dashboard-breakdown li:last-child{border-bottom:0}
+.admin-dashboard-breakdown-name{min-width:0;overflow:hidden;color:#667286;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.admin-dashboard-breakdown strong{color:#4c596c;font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
+.admin-dashboard-meter{height:6px;overflow:hidden;border-radius:5px;background:#eef1f5}
+.admin-dashboard-meter i{height:100%;display:block;border-radius:inherit;background:#6a8be0}
+.admin-dashboard-top-route{margin:-4px 0 0;color:#7e8998;font-size:10px}
+.admin-dashboard-top-route strong{color:#53627a}
+@media(max-width:760px){.admin-dashboard-breakdown li{grid-template-columns:minmax(70px,1fr) minmax(45px,1.1fr) 32px;gap:7px}.admin-dashboard-error-list li{grid-template-columns:22px minmax(0,1fr)}.admin-dashboard-error-list time{grid-column:2}}
