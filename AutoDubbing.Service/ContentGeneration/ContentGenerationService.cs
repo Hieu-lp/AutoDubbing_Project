@@ -11,7 +11,7 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
 {
     public bool IsConfigured => provider.IsConfigured && storage.IsConfigured;
     public async Task<GenerationBatchResult?> GenerateAsync(int poiId, IReadOnlyList<string> languages,
-        int batchSize, CancellationToken token)
+        int batchSize, CancellationToken token, string? expectedSourceVersion = null)
     {
         if (batchSize is < 1 or > 3 || (languages.Count < 1 || languages.Count > LanguageCatalog.All.Count)
             || languages.Any(code => LanguageCatalog.Find(code) is null)
@@ -24,6 +24,8 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
         {
             var poi = await read.FindPublishedAsync(poiId, token);
             if (poi is null) return null;
+            if (expectedSourceVersion is not null && ContentPreparation.SourceVersion.For(poi) != expectedSourceVersion)
+                throw new GenerationException("SourceChanged");
             if (poi.OriginalLanguage != "vi" || string.IsNullOrWhiteSpace(poi.OriginalDescription))
                 throw new GenerationException("UnsupportedSourceContent");
             if (poi.OriginalDescription.Length > 6000) throw new GenerationException("SourceTooLong");
@@ -78,7 +80,7 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
                             checked((int)Math.Ceiling(generated.DurationSeconds)), token))
                         throw new GenerationException("SourceChanged");
                     results.Add(new(language.Code, "Completed", true, true, AudioDurationSeconds: generated.DurationSeconds));
-                    try { cache.Remove(path); } catch (IOException) { /* SQL Ready đã lưu; cache dư không làm mất kết quả. */ }
+                    // Preserve cached WAVs as well as SQL/storage results; no automatic cleanup in this flow.
                 }
                 catch (GenerationException error)
                 {

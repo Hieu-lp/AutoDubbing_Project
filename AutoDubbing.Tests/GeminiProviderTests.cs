@@ -60,16 +60,18 @@ public class GeminiProviderTests
         Assert.Equal(2, wait.Delays.Count);
         Assert.All(wait.Delays, delay => Assert.True(delay > TimeSpan.Zero));
     }
-    [Fact]
-    public async Task Daily_or_zero_quota_does_not_retry_or_spin()
+    [Theory]
+    [InlineData("0", "ZeroLimit")]
+    [InlineData("100", "DailyLimit")]
+    public async Task Daily_and_zero_quota_are_distinct_and_do_not_retry_or_spin(string allowance, string kind)
     {
         var http = new HttpStub((_, _) => new(HttpStatusCode.TooManyRequests) { Content = new StringContent(
-            """{"error":{"message":"secret-test-value","details":[{"violations":[{"quotaId":"RequestsPerDay","quotaValue":"0"}]}]}}""") });
+            """{"error":{"message":"secret-test-value","details":[{"violations":[{"quotaId":"RequestsPerDay","quotaValue":"ALLOWANCE"}]}]}}""".Replace("ALLOWANCE", allowance)) });
         var wait = new RecordingGenerationDelay();
         var error = await Assert.ThrowsAsync<GenerationException>(() => Provider(http, wait)
             .TranslateAsync("Source.", "POI", LanguageCatalog.Find("en")!, default));
         Assert.Equal("QuotaExceeded", error.Code);
-        Assert.Equal("DailyOrZeroLimit", error.Details?.QuotaKind);
+        Assert.Equal(kind, error.Details?.QuotaKind);
         Assert.Equal(429, error.Details?.HttpStatus);
         Assert.Equal(GeminiOptions.TranslationModel, error.Details?.Model);
         Assert.DoesNotContain("secret-test-value", JsonSerializer.Serialize(error.Details));

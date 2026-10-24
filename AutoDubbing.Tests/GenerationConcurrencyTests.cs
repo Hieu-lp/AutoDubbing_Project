@@ -54,23 +54,23 @@ public class GenerationConcurrencyTests
         }
     }
     [Fact]
-    public async Task Concurrent_requests_never_run_more_than_two_generation_tasks()
+    public async Task Concurrent_requests_including_admin_never_run_more_than_one_generation_task()
     {
         var repo = new Repository();
-        var provider = new Provider(2);
+        var provider = new Provider(1);
         var service = new ContentGenerationService(repo, repo, provider, new Storage(), new MemoryAudioCache(), new GenerationCoordinator());
         var calls = Enumerable.Range(1, 3).Select(id => service.GenerateAsync(id, ["vi"], 1, default)).ToArray();
         try
         {
             await provider.Reached.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(2, provider.Calls);
-            Assert.Equal(2, provider.Peak);
+            Assert.Equal(1, provider.Calls);
+            Assert.Equal(1, provider.Peak);
         }
         finally { provider.Release.TrySetResult(); }
         var results = await Task.WhenAll(calls);
         Assert.All(results, result => Assert.Equal("Completed", Assert.Single(result!.Results).Status));
         Assert.Equal(3, provider.Calls);
-        Assert.Equal(2, provider.Peak);
+        Assert.Equal(1, provider.Peak);
     }
     [Fact]
     public async Task Duplicate_concurrent_requests_for_same_poi_do_not_generate_twice()

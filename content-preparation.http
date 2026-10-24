@@ -1,0 +1,39 @@
+# Manual examples only. POST can create paid/quota-limited provider work when enabled.
+# Current local config pauses new generation until the operator verifies quota.
+@baseUrl = https://localhost:7239
+@poiId = 1
+@jobId = 00000000-0000-0000-0000-000000000000
+
+### Frontend proximity configuration (read-only)
+GET {{baseUrl}}/api/content-preparations/settings
+
+### Prepare only source-language audio of nearby Published POIs
+POST {{baseUrl}}/api/pois/prepare-nearby
+Content-Type: application/json
+
+{
+  "latitude": 10.7798,
+  "longitude": 106.6990
+}
+
+### Explicitly request exactly one language; use codes from GET /api/languages
+POST {{baseUrl}}/api/pois/{{poiId}}/prepare-content
+Content-Type: application/json
+
+{
+  "language": "en"
+}
+
+### Replace jobId with a jobId returned by a POST (no JWT required)
+GET {{baseUrl}}/api/content-preparations/{{jobId}}
+
+### Read stored content only (does not enqueue)
+GET {{baseUrl}}/api/pois/{{poiId}}/content?language=en
+
+### Expected 400, never generates
+POST {{baseUrl}}/api/pois/{{poiId}}/prepare-content
+Content-Type: application/json
+
+{
+  "language": "unknown"
+}

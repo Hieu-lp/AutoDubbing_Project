@@ -1,5 +1,7 @@
 # Backend cốt lõi cho demo du khách
 
+**Yêu cầu mới 24/10/2026:** ngoài GET chỉ đọc, khách ẩn danh có hai POST chuẩn bị nội dung qua hàng đợi giới hạn. Chỉ audio nguồn được chuẩn bị khi POI vào 500 m; ngoại ngữ chỉ theo lựa chọn chủ động. Dừng batch 120 audio. Hợp đồng hiện hành, cấu hình tạm dừng vì quota và tích hợp frontend 50 m/3 giây ở [content-on-demand.md](content-on-demand.md). Số liệu live phía dưới là lịch sử, không phải trạng thái hôm nay.
+
 Phạm vi gồm đọc POI, nội dung/bản dịch/audio đã có và xem trước thứ tự ghé POI. Các API dưới đây cho phép truy cập ẩn danh, trả DTO, không trả thông tin Admin. Phần đăng nhập hiện có được giữ; cách cấu hình JWT và tạo Admin đầu tiên nằm trong [admin-auth.md](admin-auth.md).
 
 **Cập nhật ORS:** `POST /api/routes/preview` hiện trả tuyến đi bộ OpenRouteService `foot-walking`, kèm thời gian và geometry GeoJSON. Xem cấu hình key, hợp đồng response, lỗi và attribution trong [walking-routes.md](walking-routes.md). Nearby vẫn dùng Haversine. Các kết quả 39/39 HTTP và khoảng cách đường chim bay ghi ở cuối tài liệu thuộc phiên bản trước ORS, không phải xác nhận tuyến đi bộ thật.

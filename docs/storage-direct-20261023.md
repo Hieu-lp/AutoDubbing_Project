@@ -1,5 +1,7 @@
 # Kết quả tiếp tục pipeline — Storage trực tiếp
 
+> Mốc lịch sử. Từ 24/10/2026 dừng kế hoạch 120 audio, giữ nguyên kết quả đã có và không chạy tiếp runner. Cơ chế hiện hành là chuẩn bị nguồn theo vị trí và ngoại ngữ theo yêu cầu: [content-on-demand.md](content-on-demand.md). Không dùng số liệu lịch sử dưới đây làm kiểm kê mới; chưa gọi Gemini lại để thử quota trong đợt sửa backend.
+
 Báo cáo lúc 2026-10-23T18:45:21.573509+07:00.
 
 Trạng thái runner: **Stopped**. Lý do dừng: QuotaExceeded.
