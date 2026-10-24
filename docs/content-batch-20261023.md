@@ -1,5 +1,7 @@
 # Live content batch — 8 POI × 15 languages
 
+> Historical snapshot only. The bulk plan was cancelled on 2026-10-24; do not resume this batch. The later [direct Storage report](storage-direct-20261023.md) supersedes the counts below. Current requirements and anonymous on-demand APIs: [content-on-demand.md](content-on-demand.md). Existing results are preserved; no live inventory was rerun in the backend implementation round.
+
 State: Stopped
 
 Codes: O = original Vietnamese; R = Ready; M = missing; X = unavailable/invalid. Each cell: text/audio.

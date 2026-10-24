@@ -43,5 +43,5 @@ public interface IContentGenerationService
 {
     bool IsConfigured { get; }
     Task<GenerationBatchResult?> GenerateAsync(int poiId, IReadOnlyList<string> languages,
-        int batchSize, CancellationToken token);
+        int batchSize, CancellationToken token, string? expectedSourceVersion = null);
 }

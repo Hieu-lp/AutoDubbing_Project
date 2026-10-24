@@ -4,6 +4,7 @@ using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Data.Storage;
 using AutoDubbing.Service.ContentGeneration;
+using AutoDubbing.API.Background;
 using AutoDubbing.Service.Routes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -28,13 +29,16 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
     public string Password { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
     public string? RoutingApiKey { get; init; }
     public bool GenerationConfigured { get; init; }
+    public bool PreparationEnabled { get; init; } = true;
+    public bool StartPreparationWorker { get; init; } = true;
+    public bool ExposeOpenApi { get; init; }
     public ContentGenerationHttpStub GenerationHttp { get; } = new();
     public OrsHttpStub RoutingHttp { get; } = new();
     public CapturingLoggerProvider CapturedLogs { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(ExposeOpenApi ? "Development" : "Testing");
         builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole().AddProvider(CapturedLogs));
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -46,6 +50,7 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
                 ["Jwt:SigningKey"] = omitSigningKey ? null : SigningKey,
                 ["OpenRouteService:ApiKey"] = RoutingApiKey,
                 ["OpenRouteService:TimeoutSeconds"] = "1",
+                ["ContentPreparation:AcceptNewGeneration"] = PreparationEnabled.ToString(),
                 ["Gemini:ApiKey"] = GenerationConfigured ? "fixture-gemini-key" : null,
                 ["Gemini:MaxRetries"] = "0",
                 ["Supabase:ProjectUrl"] = GenerationConfigured ? "https://fixture.supabase.co" : null,
@@ -55,6 +60,9 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
 
         builder.ConfigureServices(services =>
         {
+            if (!StartPreparationWorker)
+                foreach (var registration in services.Where(service => service.ImplementationType == typeof(ContentPreparationWorker)).ToArray())
+                    services.Remove(registration);
             services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>()
                 .ConfigurePrimaryHttpMessageHandler(() => RoutingHttp);
             services.AddHttpClient<IContentProvider, GeminiContentProvider>()

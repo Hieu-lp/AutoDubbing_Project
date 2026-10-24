@@ -1,6 +1,8 @@
 # Chẩn đoán upload Supabase — 23/10/2026
 
-**Chưa hoàn tất: upload WAV thật vẫn bị kẹt ở giai đoạn ghi request body.** Không ghi AUDIO Ready mới hoặc chạy Gemini tiếp khi upload còn lỗi.
+> Báo cáo lỗi lịch sử trước khi kiểm chứng [hostname Storage trực tiếp](storage-direct-20261023.md); không phải tình trạng hiện hành. Batch 120 đã bị hủy theo yêu cầu mới. Hợp đồng backend hiện tại: [content-on-demand.md](content-on-demand.md).
+
+**Chưa hoàn tất tại thời điểm báo cáo này: upload WAV thật vẫn bị kẹt ở giai đoạn ghi request body.** Không ghi AUDIO Ready mới hoặc chạy Gemini tiếp khi upload còn lỗi.
 
 Đây là kiểm kê mới sau chẩn đoán, không lấy số liệu cũ làm trạng thái hiện tại. Tất cả SQL/object trước-sau giữ nguyên; cache WAV tiếng Trung còn nguyên.
 

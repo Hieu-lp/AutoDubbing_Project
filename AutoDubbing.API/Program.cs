@@ -1,5 +1,7 @@
 using AutoDubbing.API.Authentication;
 using AutoDubbing.API.Commands;
+using AutoDubbing.API.Background;
+using AutoDubbing.Service.ContentPreparation;
 using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Data.Repositories;
@@ -49,6 +51,17 @@ builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(cli
 builder.Services.AddScoped<IContentGenerationRepository, ContentGenerationRepository>();
 builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
 builder.Services.AddSingleton<GenerationCoordinator>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<ContentPreparationOptions>()
+    .Bind(builder.Configuration.GetSection(ContentPreparationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => options.PlaybackRadiusMeters <= options.PreparationRadiusMeters,
+        "PlaybackRadiusMeters must not exceed PreparationRadiusMeters.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IContentPreparationQueue, ContentPreparationQueue>();
+builder.Services.AddSingleton<IPreparationRateGate, PreparationRateGate>();
+builder.Services.AddScoped<IContentPreparationService, ContentPreparationService>();
+builder.Services.AddHostedService<ContentPreparationWorker>();
 builder.Services.AddSingleton<IGenerationDelay, GenerationDelay>();
 builder.Services.AddSingleton<IAudioCache>(new LocalAudioCache(
     Path.Combine(builder.Environment.ContentRootPath, "artifacts", "audio-cache")));

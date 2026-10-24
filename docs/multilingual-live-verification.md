@@ -1,5 +1,7 @@
 # Kiểm chứng pipeline thật — Nhà thờ Đức Bà
 
+> Báo cáo lịch sử ngày 20/10, không phải kiểm kê hiện hành. Kết quả sau đó xem [Storage trực tiếp 23/10](storage-direct-20261023.md). Từ 24/10 hủy kế hoạch batch 120, chuyển sang [nội dung theo vị trí/yêu cầu](content-on-demand.md); giữ nguyên mọi kết quả đã lưu.
+
 Ngày 20/10/2026, nhánh backend-api. Phạm vi được cho phép: đúng POI Nhà thờ Đức Bà hiện có; ID 1 được tra cứu từ SQL, không mặc định từ tên. POI vẫn Published, mô tả gốc vi không đổi.
 
 **Kết quả: 4/15 ngôn ngữ hoàn tất kỹ thuật cả văn bản và audio.** Tiếng Trung giản thể đã có bản dịch Ready nhưng TTS lỗi GenerationBlockedOrIncomplete. Dừng mở rộng; 10 ngôn ngữ tiếp theo chưa gọi. Không kết luận lỗi này là hết quota hoặc chặn nội dung vì response chi tiết không được lưu.

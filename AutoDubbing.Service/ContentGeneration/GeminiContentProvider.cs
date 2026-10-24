@@ -87,7 +87,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
     private async Task<JsonDocument> SendAsync(string model, object payload, CancellationToken token)
     {
         if (!IsConfigured) throw new GenerationException("GeminiNotConfigured");
-        if (coordinator.IsCooling(model)) throw new GenerationException("QuotaExceeded");
+        if (coordinator.IsCooling(model)) throw new GenerationException("QuotaExceeded", coordinator.CoolingFailure(model));
         for (var attempt = 0; ; attempt++)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -108,15 +108,17 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     var body = await response.Content.ReadAsStringAsync(timeout.Token);
-                    var hardQuota = HardQuota(body);
+                    var quotaKind = QuotaKind(body);
+                    var hardQuota = quotaKind is "DailyLimit" or "ZeroLimit";
                     var pause = RetryPause(response, body, attempt);
                     if (hardQuota || attempt >= options.Value.MaxRetries || pause > TimeSpan.FromSeconds(30))
                     {
                         var cooldown = hardQuota ? TimeSpan.FromMinutes(15) : TimeSpan.FromMinutes(1);
-                        coordinator.Pause(model, pause > cooldown ? pause : cooldown);
-                        throw new GenerationException("QuotaExceeded", new(model, 429,
-                            QuotaKind: hardQuota ? "DailyOrZeroLimit" : "RateLimit",
-                            RetryAfterSeconds: pause.TotalSeconds));
+                        var details = new GenerationFailureDetails(model, 429, QuotaKind: quotaKind,
+                            RetryAfterSeconds: pause.TotalSeconds);
+                        coordinator.Pause(model, quotaKind == "ZeroLimit" ? TimeSpan.FromDays(3650)
+                            : pause > cooldown ? pause : cooldown, details);
+                        throw new GenerationException("QuotaExceeded", details);
                     }
                     await delay.WaitAsync(pause, token);
                     continue;
@@ -143,20 +145,26 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
         }
     }
 
-    private static bool HardQuota(string body)
+    private static string QuotaKind(string body)
     {
         try
         {
             using var json = JsonDocument.Parse(body);
-            if (!json.RootElement.TryGetProperty("error", out var error) || !error.TryGetProperty("details", out var details)) return false;
+            if (!json.RootElement.TryGetProperty("error", out var error) || !error.TryGetProperty("details", out var details)) return "RateLimit";
+            var daily = false;
             foreach (var detail in details.EnumerateArray())
                 if (detail.TryGetProperty("violations", out var violations))
                     foreach (var violation in violations.EnumerateArray())
-                        if ((violation.TryGetProperty("quotaId", out var id) && id.GetString()!.Contains("PerDay", StringComparison.OrdinalIgnoreCase))
-                            || (violation.TryGetProperty("quotaValue", out var value) && value.ToString() == "0")) return true;
+                    {
+                        // A zero allowance is not evidence of an exhausted daily allowance.
+                        if (violation.TryGetProperty("quotaValue", out var value) && value.ToString() == "0") return "ZeroLimit";
+                        if (violation.TryGetProperty("quotaId", out var id) && id.ValueKind == JsonValueKind.String
+                            && id.GetString()!.Contains("PerDay", StringComparison.OrdinalIgnoreCase)) daily = true;
+                    }
+            if (daily) return "DailyLimit";
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException) { }
-        return false;
+        return "RateLimit";
     }
 
     private static TimeSpan RetryPause(HttpResponseMessage response, string body, int attempt)
