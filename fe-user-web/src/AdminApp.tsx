@@ -17,6 +17,7 @@ import {
 
 type Notice = { kind: 'success' | 'error'; text: string };
 type Filter = 'all' | 'published' | 'hidden';
+type AdminSection = 'overview' | 'places' | 'pipeline' | 'routes' | 'sessions';
 
 const emptyForm: AdminPoiInput = {
   name: '',
@@ -57,6 +58,8 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     case 'check': return <svg {...props}><path d="m5 12 4 4L19 6" /></svg>;
     case 'menu': return <svg {...props}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
     case 'shield': return <svg {...props}><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></svg>;
+    case 'activity': return <svg {...props}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>;
+    case 'route': return <svg {...props}><circle cx="6" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="M8 6h3a3 3 0 0 1 0 6h2a3 3 0 0 1 0 6h3" /></svg>;
     default: return <svg {...props}><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></svg>;
   }
 }
@@ -175,6 +178,7 @@ export default function AdminApp() {
   const [modalPoi, setModalPoi] = useState<AdminPoi | null | undefined>(undefined);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<AdminSection>('overview');
 
   const logout = useCallback(() => {
     clearAdminToken();
@@ -240,22 +244,12 @@ export default function AdminApp() {
   const publishedCount = pois.filter((poi) => poi.status === 'Published').length;
   const hiddenCount = pois.length - publishedCount;
   const publishedPercent = pois.length ? Math.round((publishedCount / pois.length) * 100) : 0;
-  const languageCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const poi of pois) {
-      const language = poi.originalLanguage.toLowerCase();
-      counts.set(language, (counts.get(language) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-  }, [pois]);
-  const languageNames: Record<string, string> = {
-    vi: 'Tiếng Việt',
-    en: 'English',
-    'zh-hans': '中文（简体）',
-    ja: '日本語',
-    ko: '한국어',
-    fr: 'Français',
-    es: 'Español',
+  const sectionDetails: Record<AdminSection, { title: string; description: string }> = {
+    overview: { title: 'Dashboard giám sát', description: 'Theo dõi tình trạng hệ thống và mức sử dụng theo thời gian thực.' },
+    places: { title: 'Địa điểm POI', description: 'Quản lý POI, tọa độ, phạm vi lân cận, ảnh thumbnail và mô tả gốc.' },
+    pipeline: { title: 'Bản dịch & audio', description: 'Theo dõi trạng thái pipeline và nội dung đa ngôn ngữ của từng POI.' },
+    routes: { title: 'Lộ trình', description: 'Tạo lộ trình gồm nhiều POI và sắp xếp thứ tự tham quan.' },
+    sessions: { title: 'Session', description: 'Gom POI và lộ trình thành chương trình tham quan, sau đó xuất bản hoặc đóng.' },
   };
 
   async function savePoi(input: AdminPoiInput) {
@@ -307,8 +301,12 @@ export default function AdminApp() {
       <aside className={`admin-sidebar ${sidebarOpen ? 'admin-sidebar-open' : ''}`}>
         <a className="admin-brand" href="/" aria-label="VoiceMap trang chủ"><span className="admin-brand-mark"><Icon name="pin" size={20} /></span><span>voice<span>map</span></span></a>
         <p className="admin-sidebar-label">KHÔNG GIAN LÀM VIỆC</p>
-        <a className="admin-nav-item" href="#overview" onClick={() => setSidebarOpen(false)}><Icon name="grid" /><span>Tổng quan</span></a>
-        <a className="admin-nav-item admin-nav-active" href="#places" onClick={() => setSidebarOpen(false)}><Icon name="pin" /><span>Địa điểm POI</span><span className="admin-nav-count">{pois.length}</span></a>
+        <button className={`admin-nav-item ${activeSection === 'overview' ? 'admin-nav-active' : ''}`} onClick={() => { setActiveSection('overview'); setSidebarOpen(false); }}><Icon name="activity" /><span>Dashboard</span></button>
+        <p className="admin-sidebar-label admin-sidebar-group-label">QUẢN LÝ NỘI DUNG</p>
+        <button className={`admin-nav-item ${activeSection === 'places' ? 'admin-nav-active' : ''}`} onClick={() => { setActiveSection('places'); setSidebarOpen(false); }}><Icon name="pin" /><span>Địa điểm POI</span><span className="admin-nav-count">{pois.length}</span></button>
+        <button className={`admin-nav-item ${activeSection === 'pipeline' ? 'admin-nav-active' : ''}`} onClick={() => { setActiveSection('pipeline'); setSidebarOpen(false); }}><Icon name="globe" /><span>Bản dịch & audio</span></button>
+        <button className={`admin-nav-item ${activeSection === 'routes' ? 'admin-nav-active' : ''}`} onClick={() => { setActiveSection('routes'); setSidebarOpen(false); }}><Icon name="route" /><span>Lộ trình</span></button>
+        <button className={`admin-nav-item ${activeSection === 'sessions' ? 'admin-nav-active' : ''}`} onClick={() => { setActiveSection('sessions'); setSidebarOpen(false); }}><Icon name="grid" /><span>Session</span></button>
         <div className="admin-sidebar-bottom">
           <div className="admin-sidebar-tip"><span className="admin-tip-icon"><Icon name="shield" size={17} /></span><div><strong>Không gian an toàn</strong><span>Chỉ quản trị viên được cấp quyền mới có thể chỉnh sửa nội dung.</span></div></div>
           <a className="admin-nav-item" href="/" title="Mở trang dành cho khách"><Icon name="arrow" /><span>Trang khám phá</span></a>
@@ -316,62 +314,77 @@ export default function AdminApp() {
         </div>
       </aside>
 
-      <main className="admin-main" id="overview">
+      <main className="admin-main">
         <header className="admin-topbar">
           <button className="admin-icon-button admin-menu-toggle" aria-label="Mở menu" onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
-          <div className="admin-breadcrumb">Quản trị <span>/</span> <strong>Địa điểm</strong></div>
+          <div className="admin-breadcrumb">Quản trị <span>/</span> <strong>{sectionDetails[activeSection].title}</strong></div>
           <div className="admin-account"><span className="admin-account-avatar">{(admin.fullName || admin.username).slice(0, 1).toUpperCase()}</span><span className="admin-account-name">{admin.fullName || admin.username}<small>Quản trị viên</small></span><button className="admin-icon-button admin-top-logout" aria-label="Đăng xuất" onClick={logout}><Icon name="logout" size={17} /></button></div>
         </header>
 
         <div className="admin-content">
-          <section className="admin-welcome" id="places">
-            <div><p className="admin-overline"><span className="admin-overline-dot" /> BẢNG ĐIỀU KHIỂN</p><h1>Địa điểm <span>POI</span></h1><p className="admin-page-description">Quản lý, cập nhật và xuất bản các điểm đến trên bản đồ VoiceMap.</p></div>
-            <button className="admin-button admin-button-primary admin-add-button" onClick={() => setModalPoi(null)}><Icon name="plus" size={18} /><span>Thêm địa điểm</span></button>
+          <section className="admin-welcome">
+            <div><p className="admin-overline"><span className="admin-overline-dot" /> BẢNG ĐIỀU KHIỂN</p><h1>{sectionDetails[activeSection].title}</h1><p className="admin-page-description">{sectionDetails[activeSection].description}</p></div>
+            {activeSection === 'places' && <button className="admin-button admin-button-primary admin-add-button" onClick={() => setModalPoi(null)}><Icon name="plus" size={18} /><span>Thêm địa điểm</span></button>}
           </section>
 
           {import.meta.env.DEV && <div className="admin-demo-banner" role="status"><Icon name="shield" size={16} /><span><strong>Chế độ demo local</strong> — dữ liệu mẫu lưu trong trình duyệt, không kết nối database.</span></div>}
 
           {notice && <div className={`admin-toast ${notice.kind === 'error' ? 'admin-toast-error' : ''}`} role={notice.kind === 'error' ? 'alert' : 'status'}><span className="admin-toast-mark"><Icon name={notice.kind === 'success' ? 'check' : 'close'} size={15} /></span>{notice.text}<button className="admin-icon-button" aria-label="Đóng thông báo" onClick={() => setNotice(null)}><Icon name="close" size={15} /></button></div>}
 
-          <section className="admin-stat-grid" aria-label="Thống kê địa điểm">
-            <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-blue"><Icon name="pin" size={19} /></span><span className="admin-stat-label">Tổng địa điểm</span><strong>{loading ? '—' : pois.length.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">POI trong hệ thống</span></article>
-            <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-green"><Icon name="globe" size={19} /></span><span className="admin-stat-label">Đang xuất bản</span><strong>{loading ? '—' : publishedCount.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">Hiển thị cho khách</span></article>
-            <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-amber"><Icon name="grid" size={19} /></span><span className="admin-stat-label">Bản nháp & ẩn</span><strong>{loading ? '—' : hiddenCount.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">Chưa công khai trên bản đồ</span></article>
-          </section>
-
-          <section className="admin-insights" aria-label="Tổng quan nội dung">
-            <article className="admin-insight-card">
-              <header className="admin-insight-heading">
-                <div><h2>Trạng thái xuất bản</h2><p>Tỷ lệ địa điểm đang hiển thị trên bản đồ.</p></div>
-                <span className="admin-insight-percent">{loading ? '—' : `${publishedPercent}%`}</span>
-              </header>
-              <div className="admin-status-bar" role="img" aria-label={`${publishedCount} đã xuất bản, ${hiddenCount} đang ẩn`}>
-                <span className="admin-status-bar-published" style={{ width: `${publishedPercent}%` }} />
-                <span className="admin-status-bar-hidden" style={{ width: `${100 - publishedPercent}%` }} />
+          {activeSection === 'overview' && <section className="admin-monitoring" aria-label="Dashboard giám sát">
+            <div className="admin-monitoring-note"><Icon name="activity" size={16} /><span>PRD yêu cầu cập nhật số liệu trong ≤ 10 giây. Nguồn giám sát chưa được kết nối; không hiển thị số liệu giả lập.</span></div>
+            <section className="admin-monitoring-section">
+              <header className="admin-monitoring-heading"><div><h2>Tình trạng hệ thống</h2><p>Trạng thái ứng dụng, cơ sở dữ liệu và pipeline.</p></div><span className="admin-monitoring-unavailable">Chưa có dữ liệu</span></header>
+              <div className="admin-health-grid">{['Ứng dụng', 'Cơ sở dữ liệu', 'Pipeline'].map((component) => (
+                <article className="admin-health-card" key={component}><span className="admin-health-dot" /><div><strong>{component}</strong><span>Chưa có dữ liệu trạng thái</span></div></article>
+              ))}</div>
+              <div className="admin-monitoring-stats">
+                {['Tác vụ đang chờ', 'Tác vụ đang xử lý', 'Tác vụ lỗi', 'Tỷ lệ lỗi', 'Thời gian phản hồi'].map((metric) => (
+                  <article className="admin-monitoring-stat" key={metric}><span>{metric}</span><strong>—</strong></article>
+                ))}
               </div>
-              <div className="admin-insight-legend">
-                <span><i className="admin-legend-published" />Đã xuất bản <strong>{loading ? '—' : publishedCount}</strong></span>
-                <span><i className="admin-legend-hidden" />Đang ẩn <strong>{loading ? '—' : hiddenCount}</strong></span>
+              <article className="admin-monitoring-panel"><header><h3>Lỗi gần đây</h3><span>Nhật ký hệ thống</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lỗi để hiển thị.</div></article>
+            </section>
+            <section className="admin-monitoring-section">
+              <header className="admin-monitoring-heading"><div><h2>Mức sử dụng</h2><p>Số liệu sử dụng theo thời gian thực.</p></div><span className="admin-monitoring-unavailable">Chưa có dữ liệu</span></header>
+              <div className="admin-monitoring-stats admin-usage-stats">
+                {['Người dùng đang hoạt động', 'Lượt nghe tự phát', 'Lượt nghe do chạm POI', 'Lộ trình được chọn nhiều nhất'].map((metric) => (
+                  <article className="admin-monitoring-stat" key={metric}><span>{metric}</span><strong>—</strong></article>
+                ))}
               </div>
-              {!loading && pois.length === 0 && <p className="admin-insight-empty">Thêm địa điểm để xem phân tích xuất bản.</p>}
-            </article>
-            <article className="admin-insight-card">
-              <header className="admin-insight-heading">
-                <div><h2>Ngôn ngữ nội dung</h2><p>Phân bố theo ngôn ngữ mô tả gốc.</p></div>
-                <span className="admin-insight-total">{loading ? '—' : languageCounts.length} ngôn ngữ</span>
-              </header>
-              {loading ? <div className="admin-language-loading"><span className="admin-loading-spinner" />Đang tổng hợp…</div>
-                : languageCounts.length === 0 ? <p className="admin-insight-empty">Chưa có dữ liệu ngôn ngữ.</p>
-                  : <ul className="admin-language-list">{languageCounts.slice(0, 4).map(([language, count]) => (
-                    <li key={language}>
-                      <div><span>{languageNames[language] ?? language.toUpperCase()}</span><strong>{count}</strong></div>
-                      <span className="admin-language-track"><i style={{ width: `${Math.round((count / pois.length) * 100)}%` }} /></span>
-                    </li>
-                  ))}</ul>}
-            </article>
-          </section>
+              <div className="admin-monitoring-panels">
+                <article className="admin-monitoring-panel"><header><h3>Lượt nghe theo POI</h3><span>Nhật ký lượt nghe</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lượt nghe theo POI.</div></article>
+                <article className="admin-monitoring-panel"><header><h3>Lượt nghe theo ngôn ngữ</h3><span>Ngôn ngữ audio</span></header><div className="admin-monitoring-empty">Chưa có dữ liệu lượt nghe theo ngôn ngữ.</div></article>
+              </div>
+            </section>
+          </section>}
 
-          <section className="admin-table-card">
+          {activeSection === 'places' && <>
+            <section className="admin-stat-grid" aria-label="Thống kê địa điểm">
+              <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-blue"><Icon name="pin" size={19} /></span><span className="admin-stat-label">Tổng địa điểm</span><strong>{loading ? '—' : pois.length.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">POI trong hệ thống</span></article>
+              <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-green"><Icon name="globe" size={19} /></span><span className="admin-stat-label">Đã xuất bản</span><strong>{loading ? '—' : publishedCount.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">POI đã xuất bản</span></article>
+              <article className="admin-stat-card"><span className="admin-stat-icon admin-stat-amber"><Icon name="grid" size={19} /></span><span className="admin-stat-label">Bản nháp & ẩn</span><strong>{loading ? '—' : hiddenCount.toLocaleString('vi-VN')}</strong><span className="admin-stat-caption">POI chưa xuất bản</span></article>
+            </section>
+
+            <section className="admin-insights" aria-label="Trạng thái xuất bản">
+              <article className="admin-insight-card">
+                <header className="admin-insight-heading">
+                  <div><h2>Trạng thái POI</h2><p>Phân bố địa điểm đã xuất bản và bản nháp/ẩn.</p></div>
+                  <span className="admin-insight-percent">{loading ? '—' : `${publishedPercent}%`}</span>
+                </header>
+                <div className="admin-status-bar" role="img" aria-label={`${publishedCount} đã xuất bản, ${hiddenCount} bản nháp hoặc ẩn`}>
+                  <span className="admin-status-bar-published" style={{ width: `${publishedPercent}%` }} />
+                  <span className="admin-status-bar-hidden" style={{ width: `${100 - publishedPercent}%` }} />
+                </div>
+                <div className="admin-insight-legend">
+                  <span><i className="admin-legend-published" />Đã xuất bản <strong>{loading ? '—' : publishedCount}</strong></span>
+                  <span><i className="admin-legend-hidden" />Bản nháp & ẩn <strong>{loading ? '—' : hiddenCount}</strong></span>
+                </div>
+                {!loading && pois.length === 0 && <p className="admin-insight-empty">Chưa có POI.</p>}
+              </article>
+            </section>
+
+            <section className="admin-table-card">
             <header className="admin-table-heading"><div><h2>Danh sách địa điểm</h2><p>Xem và quản lý nội dung trên bản đồ.</p></div><button className="admin-icon-button admin-refresh-button" aria-label="Tải lại danh sách" title="Tải lại danh sách" disabled={loading} onClick={() => { setLoading(true); void loadPois(token); }}><Icon name="refresh" size={17} /></button></header>
             <div className="admin-table-toolbar">
               <label className="admin-search"><Icon name="search" size={17} /><input aria-label="Tìm địa điểm" placeholder="Tìm theo tên hoặc mô tả…" value={query} onChange={(event) => setQuery(event.target.value)} /><kbd>⌘ K</kbd></label>
@@ -397,7 +410,27 @@ export default function AdminApp() {
               </table>
             </div>
             <footer className="admin-table-footer"><span>Hiển thị <strong>{loading ? '—' : visiblePois.length}</strong> / <strong>{pois.length}</strong> địa điểm</span><span>Dữ liệu cập nhật trực tiếp</span></footer>
-          </section>
+            </section>
+          </>}
+
+          {activeSection === 'pipeline' && <section className="admin-feature-placeholder">
+            <div className="admin-feature-icon"><Icon name="globe" size={22} /></div>
+            <h2>Trạng thái bản dịch và audio theo POI</h2>
+            <div className="admin-feature-empty">Chưa có dữ liệu pipeline để hiển thị.</div>
+          </section>}
+
+          {activeSection === 'routes' && <section className="admin-feature-placeholder">
+            <div className="admin-feature-icon"><Icon name="route" size={22} /></div>
+            <h2>Quản lý lộ trình</h2>
+            <div className="admin-feature-empty">Chưa có dữ liệu lộ trình để hiển thị.</div>
+          </section>}
+
+          {activeSection === 'sessions' && <section className="admin-feature-placeholder">
+            <div className="admin-feature-icon"><Icon name="grid" size={22} /></div>
+            <h2>Quản lý session</h2>
+            <div className="admin-feature-empty">Chưa có dữ liệu session để hiển thị.</div>
+          </section>}
+
           <footer className="admin-page-footer">© {new Date().getFullYear()} VoiceMap <span>•</span> Quản lý địa điểm văn hóa</footer>
         </div>
       </main>
