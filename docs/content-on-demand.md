@@ -1,6 +1,6 @@
 # Nội dung theo vị trí và ngôn ngữ được chọn
 
-Yêu cầu hiện hành ngày 24/10/2026. Tài liệu này thay thế kế hoạch sinh sẵn 8 POI × 15 ngôn ngữ và quy tắc cũ chỉ Admin mới có thể kích hoạt pipeline. Không chạy tiếp batch 120 audio. Khách dùng ẩn danh; Gemini/Supabase key chỉ ở backend. Không thêm frontend, bảng, cột hoặc migration.
+Yêu cầu backend hiện hành từ ngày 24/10/2026. Tài liệu này thay thế kế hoạch sinh sẵn 8 POI × 15 ngôn ngữ và quy tắc cũ chỉ Admin mới có thể kích hoạt pipeline. Không chạy tiếp batch 120 audio. Khách dùng ẩn danh; Gemini/Supabase key chỉ ở backend. Không thêm bảng, cột hoặc migration. Web du khách hiện có đã được tích hợp ngày 25/10/2026; xem [bàn giao frontend và kiểm chứng thật](frontend-user-web-integration.md), [hướng dẫn chạy web](../fe-user-web/README.md).
 
 ## Phạm vi và trạng thái triển khai
 
@@ -8,7 +8,7 @@ Yêu cầu hiện hành ngày 24/10/2026. Tài liệu này thay thế kế hoạ
 - Chỉ POST chọn ngôn ngữ cụ thể mới yêu cầu ngoại ngữ của một POI. Không tự xếp 14 bản dịch khi nhận vị trí. Danh mục 15 mã giữ nguyên trong [LanguageCatalog](../AutoDubbing.Service/Languages/LanguageCatalog.cs).
 - Ready hiện hành được trả ngay, không gọi provider/upload. Thành công lưu SQL và URL để mọi khách dùng chung. Tái sử dụng bản dịch Ready và WAV cache; kiểm tra object trước upload, giữ hostname Storage trực tiếp đã kiểm chứng. Chỉ Ready sau xác minh upload và lưu SQL thành công.
 - Không xóa POI, mô tả gốc, bản dịch, audio, cache hay object có sẵn. Pipeline hiện giữ WAV cache cả sau khi lưu Ready; chưa có tự dọn cache, cần theo dõi dung lượng đĩa. Không đổi định dạng WAV hoặc thêm chuyển mã.
-- Không chạy dịch vụ thật trong đợt triển khai này. Các số liệu Nhà thờ Đức Bà đủ 15 ngôn ngữ trong [báo cáo Storage trực tiếp](storage-direct-20261023.md) là bằng chứng lịch sử, không phải kiểm kê lại hôm nay. Dữ liệu đó được giữ nguyên.
+- Đợt triển khai backend ngày 24/10 không chạy dịch vụ thật. Các số liệu trong [báo cáo Storage trực tiếp](storage-direct-20261023.md) là bằng chứng lịch sử. Kiểm kê SQL và kiểm tra 15 audio đã lưu trong browser ngày 25/10 nằm trong [bàn giao frontend](frontend-user-web-integration.md); generation vẫn tạm dừng, dữ liệu được giữ nguyên.
 
 **Công tắc tạm dừng:** [appsettings.json](../AutoDubbing.API/appsettings.json) hiện đặt `ContentPreparation:AcceptNewGeneration=false` vì lần chạy thật gần nhất bị quota chặn. Ready vẫn trả 200; nội dung thiếu trả 503 với `GenerationPaused`, không nhận job. Sau khi người vận hành xác minh quota/quyền model, đặt `ContentPreparation__AcceptNewGeneration=true` trong môi trường backend và khởi động lại để nhận công việc. Không tự bật billing, đổi tài khoản/key/model hoặc gọi thử Gemini để dò quota. Endpoint Admin cũ vẫn được bảo vệ và là công cụ vận hành chủ động; công tắc này chỉ điều khiển luồng khách.
 
