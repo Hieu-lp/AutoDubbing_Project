@@ -1,4 +1,6 @@
-export type Language = 'vi' | 'en';
+export type Language =
+  | 'vi' | 'en' | 'zh-hans' | 'ja' | 'ko' | 'fr' | 'de' | 'es'
+  | 'ru' | 'it' | 'pt' | 'th' | 'id' | 'ms' | 'hi';
 
 export interface Poi {
   id: number;
@@ -7,11 +9,11 @@ export interface Poi {
   longitude: number;
   proximityRadius: number;
   thumbnailUrl: string | null;
-  originalDescription: string;
+  originalDescription?: string;
   originalLanguage: Language;
-  descriptions: Record<Language, string>;
-  audioUrls: Partial<Record<Language, string>>;
-  category: string;
+  descriptions?: Partial<Record<Language, string>>;
+  audioUrls?: Partial<Record<Language, string>>;
+  category?: string;
 }
 
 export interface Coordinates {
