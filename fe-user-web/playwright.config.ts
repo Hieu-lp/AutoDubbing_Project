@@ -6,7 +6,7 @@ if (process.env.CI && process.env.LIVE_API === '1') {
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: process.env.LIVE_API === '1' ? '**/live.spec.mjs' : '**/visitor.spec.mjs',
+  testMatch: process.env.LIVE_API === '1' ? '**/live*.spec.mjs' : '**/visitor.spec.mjs',
   timeout: 90_000,
   fullyParallel: false,
   workers: 1,

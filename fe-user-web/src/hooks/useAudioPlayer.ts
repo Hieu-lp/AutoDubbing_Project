@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PoiContent } from '../types';
 import { isReady, preparationKey } from '../services/api';
+import { tourDiagnostic } from '../tour/diagnostics';
 
 export function useAudioPlayer(selectionKey: string | null, content?: PoiContent) {
   const ref = useRef<HTMLAudioElement>(null);
   const active = useRef<{ key: string; url: string } | null>(null);
   const sequence = useRef(0);
+  const pending = useRef<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState('');
   const [speed, setSpeed] = useState(1);
   const invalidatePlay = useCallback(() => { sequence.current++; }, []);
+  const cancelPending = useCallback(() => {
+    if (pending.current === null) return;
+    sequence.current++; pending.current = null; ref.current?.pause(); setIsPlaying(false);
+  }, []);
   const stop = useCallback(() => {
-    sequence.current++;
+    sequence.current++; pending.current = null;
     if (ref.current) { ref.current.pause(); ref.current.currentTime = 0; }
     setIsPlaying(false); setCurrentTime(0); setError('');
   }, []);
-  const pause = useCallback(() => { sequence.current++; ref.current?.pause(); setIsPlaying(false); }, []);
+  const pause = useCallback(() => { sequence.current++; pending.current = null; ref.current?.pause(); setIsPlaying(false); }, []);
   useEffect(() => {
     const player = ref.current;
     if (!player) return;
@@ -59,19 +65,22 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
       player.pause(); player.src = url; setCurrentTime(0); setDuration(0); active.current = { key, url };
     }
     setError('');
+    pending.current = attempt;
+    tourDiagnostic('audio-play', { poiId: next.poiId, language: next.actualLanguage, path: new URL(url, location.href).pathname });
     try {
       await player.play();
       if (attempt !== sequence.current) return false;
       if (!valid()) { player.pause(); return false; }
-      setIsPlaying(true); return true;
+      setIsPlaying(true); tourDiagnostic('audio-playing', { poiId: next.poiId }); return true;
     } catch (failure) {
       if (attempt === sequence.current) {
+        tourDiagnostic('audio-rejected', { poiId: next.poiId, name: failure instanceof Error ? failure.name : 'UnknownError' });
         setIsPlaying(false);
         setError(failure instanceof DOMException && failure.name === 'NotAllowedError'
           ? 'Trình duyệt chặn tự phát. Hãy chạm nút Phát để nghe.' : 'Không phát được audio. Hãy chạm Phát để thử lại.');
       }
       return false;
-    }
+    } finally { if (pending.current === attempt) pending.current = null; }
   }, []);
   const seek = useCallback((time: number) => {
     if (ref.current && Number.isFinite(ref.current.duration))
@@ -83,5 +92,5 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
     ref.current.playbackRate = value; setSpeed(value);
   }, []);
   return { ref, isPlaying, currentTime, duration, error, speed, stop, pause, play, seek, cycleSpeed,
-    busy: () => !!ref.current && !ref.current.paused && !ref.current.ended };
+    cancelPending, busy: () => !!ref.current && !ref.current.paused && !ref.current.ended };
 }

@@ -6,7 +6,7 @@ import type { PoiContent } from './types';
 import { useTranslation } from 'react-i18next';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import type { Coordinates, Language } from './types';
+import type { Coordinates, Language, VisitorLocation } from './types';
 import { useVisitorData } from './hooks/useVisitorData';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { isReady, preparationKey } from './services/api';
@@ -57,8 +57,8 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const [location, setLocation] = useState<Coordinates | null>(null);
-  const [locationSource, setLocationSource] = useState<'gps' | 'map' | null>(null);
+  const [location, setLocation] = useState<VisitorLocation | null>(null);
+  const locationSource = location?.source ?? null;
   const [gpsState, setGpsState] = useState<'idle' | 'loading' | 'ready' | 'denied' | 'error'>('idle');
   const [gpsMessage, setGpsMessage] = useState('');
   const [selectedPoiId, setSelectedPoiId] = useState<number | null>(null);
@@ -92,6 +92,10 @@ export default function App() {
   const routeOrder = walkingRoute?.stops.map(stop => stop.poiId) ?? routePoiIds;
   const routePois = routeOrder.map(id => pois.find(poi => poi.id === id)).filter((poi): poi is (typeof pois)[number] => !!poi);
   const mapPois = pois;
+  const nearbyNotices = location && visitor.settings.data ? nearby
+    .filter(poi => distanceMeters(location, poi) <= visitor.settings.data!.preparationRadiusMeters)
+    .map(poi => ({ poi, message: preparationMessage(visitor.preparations[preparationKey(poi.id, poi.originalLanguage)]) }))
+    .filter(item => item.message) : [];
   const guide = useTourGuide({
     pois, settings: visitor.settings.data, preparation: visitor.preparation,
     selectedId: selectedPoiId, language: narrationLanguage, routeMode,
@@ -103,7 +107,7 @@ export default function App() {
       if (!signal.aborted) queryClient.setQueryData(contentKey(poi.id,poi.originalLanguage),saved);
       return saved;
     },
-    onLocation: point => { setLocation(point); setLocationSource('gps'); setMapPicker(false); },
+    onLocation: point => { setLocation(point); },
     onGpsState: (state,message) => { setGpsState(state); setGpsMessage(message); },
     onAutoSelect: poi => { setSelectedPoiId(poi.id); setNarrationLanguage(poi.originalLanguage); setPlayIntent(null); },
     player: audio,
@@ -131,15 +135,17 @@ export default function App() {
     routeRequest.current.controller?.abort(); routeRequest.current.version++;
     setWalkingRoute(null); setRouteError(''); setRouteLoading(false);
   }
-  function locateMe() { guide.locate(); }
+  function locateMe() {
+    choiceVersion.current++; setPlayIntent(null); setMapPicker(false); invalidateRoute(); guide.locate();
+  }
   function toggleNarration() {
     choiceVersion.current++; setPlayIntent(null);
     if (guide.running) guide.stop();
     else { audioRef.current?.load(); guide.start(); }
   }
   function chooseMapPoint(point: Coordinates) {
-    guide.stop(); guide.invalidate(); choiceVersion.current++; setPlayIntent(null); setLocation(point); setLocationSource('map'); setGpsState('ready');
-    setGpsMessage('Vị trí chọn trên bản đồ chỉ dùng khám phá/lập lộ trình, không dùng tự phát GPS.');
+    setSelectedPoiId(null); setRouteMode(false);
+    choiceVersion.current++; setPlayIntent(null); guide.chooseMapPoint(point);
     setMapPicker(false); invalidateRoute();
   }
   function selectPoi(id: number) { guide.invalidate(); choiceVersion.current++; setPlayIntent(null); audio.stop(); setSelectedPoiId(id); }
@@ -209,10 +215,10 @@ export default function App() {
               <MapLocation point={location} />
               {walkingRoute && <><Polyline positions={walkingRoute.points} pathOptions={{ color: '#2563eb', weight: 5, opacity: 0.86, lineCap: 'round', lineJoin: 'round' }} /><FitRoute points={walkingRoute.points} /></>}
               {location && visitor.settings.data && <Circle interactive={false} center={[location.latitude,location.longitude]} radius={visitor.settings.data.preparationRadiusMeters} pathOptions={{ color: '#2563eb', weight: 1, fillOpacity: .05 }} />}
-              {location && <Marker position={[location.latitude, location.longitude]} icon={locationIcon} />}
+              {location && <Marker position={[location.latitude, location.longitude]} icon={locationIcon} bubblingMouseEvents={false} />}
               {mapPois.map((poi, index) => {
                 const stopNumber = routeOrder.indexOf(poi.id);
-                return <Marker title={poi.name} alt={poi.name} key={poi.id} position={[poi.latitude, poi.longitude]} icon={poiIcon(routeMode ? (stopNumber >= 0 ? stopNumber + 1 : '·') : index + 1, routeMode ? stopNumber >= 0 : selectedPoiId === poi.id)} eventHandlers={{ click: () => routeMode ? toggleRoutePoi(poi.id) : selectPoi(poi.id) }} />;
+                return <Marker title={poi.name} alt={poi.name} key={poi.id} position={[poi.latitude, poi.longitude]} icon={poiIcon(routeMode ? (stopNumber >= 0 ? stopNumber + 1 : '·') : index + 1, routeMode ? stopNumber >= 0 : selectedPoiId === poi.id)} bubblingMouseEvents={false} eventHandlers={{ click: () => routeMode ? toggleRoutePoi(poi.id) : selectPoi(poi.id) }} />;
               })}
             </MapContainer>
             <div className="map-topline"><div className="map-location"><span className={`status-dot ${locationSource === 'gps' ? 'status-live' : ''}`} />{locationSource === 'gps' ? t('gps') : locationSource === 'map' ? t('selected') : 'QUẬN 1 · TP. HỒ CHÍ MINH'}</div><button className="map-locate" onClick={locateMe} aria-label={t('locate')} title={t('locate')}><Icon name="compass" size={19} /></button></div>
@@ -228,7 +234,8 @@ export default function App() {
             <button className={`narration-action ${guide.running ? 'narration-active' : ''}`} onClick={toggleNarration} disabled={!visitor.settings.data || !pois.length} aria-pressed={guide.running}>
               <Icon name="volume" size={18} />{guide.running ? (language === 'vi' ? 'Dừng thuyết minh' : 'Stop narration') : (language === 'vi' ? 'Bắt đầu thuyết minh' : 'Start narration')}
             </button>
-            {guide.running && <p className="integration-note" role="status">{guide.reliable ? `GPS đang bật · chuẩn bị ${visitor.settings.data?.preparationRadiusMeters} m · tự phát ${visitor.settings.data?.playbackRadiusMeters} m / ${visitor.settings.data?.dwellSeconds} giây` : 'Đang chờ vị trí GPS mới và đủ tin cậy; chưa tự phát audio.'}</p>}
+            {guide.running && <p className="integration-note" role="status">{guide.reliable ? `${locationSource === 'map' ? 'Dùng vị trí đã chọn' : 'GPS đang bật'} · chuẩn bị ${visitor.settings.data?.preparationRadiusMeters} m · tự phát ${visitor.settings.data?.playbackRadiusMeters} m / ${visitor.settings.data?.dwellSeconds} giây` : 'Đang chờ vị trí GPS mới và đủ tin cậy; chưa tự phát audio.'}</p>}
+            {guide.running && nearbyNotices.map(({ poi, message }) => <p key={poi.id} className="integration-note" role="status">{poi.name}: {message}</p>)}
             {gpsMessage && <div className={`notice ${gpsState === 'ready' ? 'notice-soft' : ''}`} role="status"><span>{gpsState === 'ready' ? 'i' : '!'}</span><p>{gpsMessage}</p><button onClick={() => setGpsMessage('')} aria-label="Dismiss"><Icon name="close" size={16} /></button></div>}
             {visitor.pois.isPending && <p className="integration-note" role="status">Đang tải địa điểm…</p>}
             {visitor.pois.isError && <div className="route-error" role="alert">Không tải được danh sách địa điểm. <button onClick={() => void visitor.pois.refetch()}>Thử lại</button></div>}

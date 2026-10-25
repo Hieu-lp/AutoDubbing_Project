@@ -24,6 +24,8 @@ export interface Coordinates {
   timestamp?: number;
 }
 
+export type VisitorLocation = Coordinates & { source: 'gps' | 'map' };
+
 export interface NearbyPoi extends Poi {
   distance: number;
 }

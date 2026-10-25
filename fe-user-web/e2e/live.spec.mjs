@@ -42,7 +42,7 @@ test('LIVE: missing audio remains readable with GenerationPaused and explicit fa
 test('LIVE: walking preview through backend ORS or its explicit provider error',async({page},info)=>{
   await openLive(page);await page.getByRole('button',{name:'Chọn vị trí',exact:true}).click();
   await page.locator('.leaflet-map').click({position:{x:60,y:180}});
-  await expect(page.locator('.notice')).toContainText('chỉ dùng khám phá');
+  await expect(page.locator('.notice')).toContainText('làm vị trí du khách');
   await page.getByRole('button',{name:'Tạo lộ trình',exact:true}).click();
   await page.locator('.route-poi-picker').getByRole('button',{name:/Nhà thờ/}).click();
   await page.locator('.route-poi-picker').getByRole('button',{name:/Bưu điện/}).click();

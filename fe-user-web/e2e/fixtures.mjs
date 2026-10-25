@@ -29,9 +29,13 @@ export async function setup(page,{gps=true,...options}={}) {
     HTMLMediaElement.prototype.pause=function(){playing.set(this,false);this.dispatchEvent(new Event('pause'));};
     if(gps){
       const watchers=new Map();let id=0;
-      navigator.geolocation.watchPosition=(success,error)=>{watchers.set(++id,{success,error});return id;};
+      window.__gpsCallbacks=[];
+      navigator.geolocation.watchPosition=(success,error)=>{watchers.set(++id,{success,error});window.__gpsCallbacks.push(success);return id;};
       navigator.geolocation.clearWatch=id=>{watchers.delete(id);window.__cleared++;};
-      navigator.geolocation.getCurrentPosition=success=>success({coords:{latitude:10.7798,longitude:106.699,accuracy:5},timestamp:Date.now()});
+      navigator.geolocation.getCurrentPosition=success=>{
+        window.__resolveLocate=()=>success({coords:{latitude:10.7798,longitude:106.699,accuracy:5},timestamp:Date.now()});
+        if(!window.__holdLocate)window.__resolveLocate();
+      };
       window.__gps=(latitude=10.7798,longitude=106.699,accuracy=5,age=0)=>{for(const watcher of watchers.values())watcher.success({coords:{latitude,longitude,accuracy},timestamp:Date.now()-age});};
       window.__gpsError=code=>{for(const watcher of watchers.values())watcher.error({code});};
     }
@@ -49,6 +53,7 @@ export async function setup(page,{gps=true,...options}={}) {
     if(path==='/api/content-preparations/settings')return respond({preparationRadiusMeters:500,playbackRadiusMeters:50,dwellSeconds:3,pollAfterSeconds:3});
     if(path==='/api/pois/prepare-nearby'){
       world.posts.push({path,body});
+      if(world.nearbyDelay)await new Promise(resolve=>setTimeout(resolve,world.nearbyDelay));
       return respond({preparationRadiusMeters:500,items:[prepared(1,'vi',world.ready?'Ready':'Queued'),prepared(2,'vi','Unavailable')]});
     }
     if(path==='/api/routes/preview'){

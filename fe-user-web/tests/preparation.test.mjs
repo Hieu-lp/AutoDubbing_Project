@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PreparationClient } from '../src/services/preparationClient.ts';
+import { PreparationClient, preparationMessage } from '../src/services/preparationClient.ts';
 import { ApiError } from '../src/services/api.ts';
 const content=(id=1,language='vi')=>({poiId:id,requestedLanguage:language,actualLanguage:language,isFallback:false,text:'Fixture',audio:{id:1,language,url:`https://fixture.test/${language}.wav`}});
 const item=(status='Ready',id=1,language='vi')=>({poiId:id,language,sourceVersion:'fixture',status,textReady:true,audioReady:status==='Ready',
@@ -31,6 +31,23 @@ test('GenerationPaused stops repeated POSTs for missing content and keeps existi
   await client.prepareNearby({latitude:0,longitude:0},[2]);
   assert.equal(calls,1);assert.equal(client.states.get('1:vi').item.content.text,'Fixture');
 });
+
+test('paused generation still checks unseen nearby POIs and serves Ready content without repeating POSTs',async t=>{
+  let now=100_000;t.mock.method(Date,'now',()=>now);let calls=0;
+  const {client}=setup({nearby:async()=>({data:{items:[++calls===1
+    ? {...item('Unavailable',8),errorCode:'GenerationPaused'} : item('Ready',1)]},status:calls===1?503:200,retryAfterMs:0})});
+  client.setInterest('nearby',['8:vi']);await client.prepareNearby({latitude:0,longitude:0},[8]);
+  assert.equal(client.paused,true);assert.match(preparationMessage(client.states.get('8:vi')),/tạm dừng/);
+  client.stopNearby(true);client.setInterest('nearby',['1:vi']);await client.prepareNearby({latitude:.001,longitude:0},[1]);
+  assert.equal(client.states.get('1:vi').item.status,'Ready');
+  for(let i=0;i<40;i++){now+=1000;await client.prepareNearby({latitude:.001,longitude:0},[1]);}
+  assert.equal(calls,2);assert.equal(client.states.get('1:vi').item.content.audio.language,'vi');
+});
+
+test('preparing is shown only for a real queued or processing job',()=>{
+  assert.match(preparationMessage({item:item('Queued')}),/Đang chuẩn bị/);
+  assert.doesNotMatch(preparationMessage({item:{...item('Queued'),jobId:null}}),/Đang chuẩn bị/);
+});
 test('accepted job honors delay and polls to Ready with no further POSTs',async()=>{
   let status=0;const stamps=[];const start=Date.now();
   const {client}=setup({prepare:async()=>({...result(item('Queued')),retryAfterMs:15}),status:async()=>{stamps.push(Date.now());return result(item(++status===1?'Processing':'Ready'));}});
@@ -56,6 +73,25 @@ test('GPS ticks do not repeat nearby POSTs; no foreign languages are prepared',a
   await client.prepareNearby({latitude:0,longitude:0},[1,2]);
   for(let index=0;index<20;index++) await client.prepareNearby({latitude:0,longitude:0},[1,2]);
   assert.equal(counts.nearby,1);assert.equal(counts.prepare,0);
+});
+
+test('changing location releases an aborted nearby request and ignores its late response',async()=>{
+  const first=deferred(); const second=deferred(); const signals=[];
+  const {client,updates}=setup({nearby:async(point,signal)=>{
+    signals.push(signal); return signals.length===1?first.promise:second.promise;
+  }});
+  client.setInterest('selection',[]);client.setInterest('nearby',['1:vi']);
+  const old=client.prepareNearby({latitude:0,longitude:0},[1]);
+  client.stopNearby();assert.equal(signals[0].aborted,true);
+  client.setInterest('nearby',['1:vi']);
+  const current=client.prepareNearby({latitude:.0001,longitude:0},[1]);
+  assert.equal(signals.length,2);
+  first.resolve({data:{items:[item('Unavailable')]},status:503,retryAfterMs:0});await old;
+  assert.equal(updates.length,0);
+  second.resolve({data:{items:[item()]},status:200,retryAfterMs:0});await current;
+  assert.equal(client.states.get('1:vi').item.status,'Ready');
+  await client.prepareNearby({latitude:.0001,longitude:0},[1]);assert.equal(signals.length,2);
+  client.cancelAll();
 });
 test('job 404 reads current stored content once and does not re-enqueue',async()=>{
   const {client,counts}=setup({prepare:async()=>result(item('Queued')),status:async()=>{throw new ApiError(404);}});

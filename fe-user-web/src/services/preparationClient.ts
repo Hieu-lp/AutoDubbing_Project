@@ -1,5 +1,6 @@
 import type { Coordinates, PreparationItem } from '../types.ts';
 import { ApiError, isReady, preparationKey, visitorApi } from './api.ts';
+import { tourDiagnostic } from '../tour/diagnostics.ts';
 
 export interface PreparationState { item?: PreparationItem; message?: string; retryAt?: number }
 type Dependencies = Pick<typeof visitorApi, 'prepare' | 'nearby' | 'status' | 'content'>;
@@ -26,8 +27,9 @@ export class PreparationClient {
   private groups = new Map<string, Set<string>>();
   private tasks = new Map<string, Task>();
   private nearbySeen = new Set<number>();
-  private nearbyController: AbortController | null = null;
+  private nearbyRequest: { controller: AbortController; added: number[] } | null = null;
   private lastNearbyAt = 0;
+  private nearbyDecision = '';
   constructor(changed: (key: string, state: PreparationState) => void, api: Dependencies = visitorApi) {
     this.changed = changed; this.api = api;
   }
@@ -81,7 +83,7 @@ export class PreparationClient {
     if (pending(state?.item) && state?.item?.jobId)
       return this.run(key, signal => this.poll(state.item!, 0, signal));
     if (isReady(state?.item?.content, language) || (state && !retry)) return;
-    if (this.paused) { this.emit(key, { ...state, message: 'Nội dung hiện chưa sẵn sàng' }); return; }
+    if (this.paused) { this.emit(key, { ...state, message: generationPausedMessage }); return; }
     return this.run(key, async signal => {
       const result = await this.api.prepare(id, language, signal);
       if (signal.aborted) return;
@@ -90,13 +92,27 @@ export class PreparationClient {
     });
   }
   async prepareNearby(point: Coordinates, ids: number[]): Promise<void> {
-    if (this.paused || this.nearbyController || Date.now() < this.cooldownUntil
-      || Date.now() - this.lastNearbyAt < 10_000 || !ids.some(id => !this.nearbySeen.has(id))) return;
-    const controller = new AbortController(); this.nearbyController = controller;
+    // Paused generation still allows Ready content and the status of unseen POIs.
+    const reason = !ids.length ? 'no-nearby-pois' : this.nearbyRequest ? 'request-in-flight'
+      : !ids.some(id => !this.nearbySeen.has(id)) ? 'already-requested'
+      : Date.now() < this.cooldownUntil ? 'rate-limit' : Date.now() - this.lastNearbyAt < 10_000 ? 'throttle' : '';
+    const decision = `${ids.join(',')}:${reason}`;
+    if (decision !== this.nearbyDecision) {
+      this.nearbyDecision = decision;
+      if (reason) tourDiagnostic('nearby-skipped', { ids, reason });
+    }
+    if (reason) return;
+    const controller = new AbortController();
+    const request = { controller, added: ids.filter(id => !this.nearbySeen.has(id)) };
+    this.nearbyRequest = request;
     this.lastNearbyAt = Date.now(); ids.forEach(id => this.nearbySeen.add(id));
+    tourDiagnostic('nearby-request', { latitude: point.latitude, longitude: point.longitude, ids, generationPaused: this.paused });
     try {
       const result = await this.api.nearby(point, controller.signal);
       if (controller.signal.aborted) return;
+      tourDiagnostic('nearby-response', { status: result.status, items: result.data.items.map(item => ({
+        poiId: item.poiId, status: item.status, errorCode: item.errorCode, jobId: item.jobId, audioReady: item.audioReady,
+      })) });
       for (const item of result.data.items) {
         this.accept(item, result.retryAfterMs);
         const key = preparationKey(item.poiId, item.language);
@@ -105,7 +121,7 @@ export class PreparationClient {
       }
     } catch (error) {
       if (!controller.signal.aborted) for (const id of ids) this.failure(preparationKey(id, 'vi'), error);
-    } finally { if (this.nearbyController === controller) this.nearbyController = null; }
+    } finally { if (this.nearbyRequest === request) this.nearbyRequest = null; }
   }
   private async poll(initial: PreparationItem, retryAfterMs: number, signal: AbortSignal) {
     const started = Date.now(); const key = preparationKey(initial.poiId, initial.language);
@@ -133,20 +149,29 @@ export class PreparationClient {
       }
     }
   }
-  stopNearby() { this.nearbyController?.abort(); this.setInterest('nearby', []); }
+  stopNearby(newPosition = false) {
+    if (this.nearbyRequest) {
+      this.nearbyRequest.controller.abort();
+      for (const id of this.nearbyRequest.added) this.nearbySeen.delete(id);
+      this.nearbyRequest = null; this.lastNearbyAt = 0;
+    }
+    if (newPosition) this.lastNearbyAt = 0;
+    this.setInterest('nearby', []);
+  }
   resetVisit() { this.nearbySeen.clear(); this.lastNearbyAt = 0; }
   cancelAll() {
     for (const task of this.tasks.values()) task.controller.abort();
-    this.nearbyController?.abort(); this.groups.clear();
+    this.stopNearby(); this.groups.clear();
   }
 }
 
+export const generationPausedMessage = 'Nội dung hiện chưa sẵn sàng: chưa có audio, tính năng tạo nội dung đang tạm dừng. Bạn vẫn có thể đọc mô tả.';
 export function preparationMessage(state?: PreparationState): string {
   if (state?.message) return state.message;
   const item = state?.item;
   if (!item || item.status === 'Ready') return '';
-  if (pending(item)) return 'Đang chuẩn bị nội dung…';
-  if (item.errorCode === 'GenerationPaused') return 'Nội dung hiện chưa sẵn sàng';
+  if (pending(item) && item.jobId) return 'Đang chuẩn bị nội dung…';
+  if (item.errorCode === 'GenerationPaused') return generationPausedMessage;
   if (item.requiresOperatorAction) return 'Nội dung hiện chưa sẵn sàng. Dịch vụ cần được kiểm tra.';
   if (item.status === 'QuotaExceeded' || item.status === 'QueueFull') return 'Nội dung hiện chưa sẵn sàng. Vui lòng chờ rồi thử lại.';
   return 'Nội dung hiện chưa sẵn sàng';

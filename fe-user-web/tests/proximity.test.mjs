@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { distanceMeters, gpsPolicy, ProximityTracker, trustedFix } from '../src/tour/proximity.ts';
+import { distanceMeters, gpsPolicy, ProximityTracker, trustedFix, trustedLocation } from '../src/tour/proximity.ts';
 const now = 100_000_000;
 const fix = { latitude: 0, longitude: 0, accuracy: 5, timestamp: now };
 const settings = { preparationRadiusMeters: 500, playbackRadiusMeters: 50, dwellSeconds: 3, pollAfterSeconds: 3 };
@@ -40,4 +40,16 @@ test('backend settings govern thresholds instead of hardcoded 50m/3s', () => {
   tracker.update(pois,fix,config,now,0);
   assert.equal(tracker.update(pois,fix,config,now+4000,4000).eligible.length,0);
   assert.deepEqual(tracker.update(pois,fix,config,now+5000,5000).eligible.map(p=>p.id),[1]);
+});
+
+test('a stationary map location stays valid without GPS accuracy or a timestamp', () => {
+  const point = { latitude: 0, longitude: 0, source: 'map' };
+  const tracker = new ProximityTracker();
+  assert.equal(trustedFix(point, now), false);
+  assert.equal(trustedLocation(point, now), true);
+  tracker.update([poi(1)], point, settings, now, 0);
+  assert.equal(tracker.update([poi(1)], point, settings, now + 60_000, 60_000).eligible[0].id, 1);
+  for (const invalid of [{...point, latitude: NaN}, {...point, longitude: 181}])
+    assert.equal(trustedLocation(invalid, now), false);
+  assert.equal(trustedLocation({...fix, source: 'gps'}, now + gpsPolicy.maxAgeMs + 1), false);
 });
