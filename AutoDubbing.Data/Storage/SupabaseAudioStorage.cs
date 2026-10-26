@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 
 namespace AutoDubbing.Data.Storage;
@@ -43,8 +44,12 @@ public sealed class SupabaseAudioStorage(HttpClient client, IOptions<SupabaseOpt
     public async Task<string> UploadAsync(string objectPath, byte[] wav, CancellationToken token)
     {
         if (!IsConfigured) throw new AudioStorageException("SupabaseNotConfigured");
-        if (!Regex.IsMatch(objectPath, @"\Agenerated/poi-[1-9]\d*/[a-z-]+/[a-f0-9]{64}\.wav\z")
+        var pathMatch = Regex.Match(objectPath, @"\Agenerated/poi-[1-9]\d*/[a-z-]+/[a-f0-9]{64}(?:-(?<audioHash>[a-f0-9]{64}))?\.wav\z");
+        if (!pathMatch.Success
             || wav.Length is < 44 or > 6 * 1024 * 1024) throw new AudioStorageException("InvalidAudioUpload");
+        if (pathMatch.Groups["audioHash"] is { Success: true } hash
+            && hash.Value != Convert.ToHexStringLower(SHA256.HashData(wav)))
+            throw new AudioStorageException("InvalidAudioUpload");
         var settings = options.Value;
         var storage = settings.ProjectUrl!.TrimEnd('/') + "/storage/v1";
         // Supabase's direct Storage hostname avoids the project API gateway for file bodies.

@@ -36,7 +36,8 @@ public sealed class GenerationDelay : IGenerationDelay
 }
 public sealed record LanguageGenerationResult(string Language, string Status, bool TextReady,
     bool AudioReady, string? ErrorCode = null, double? AudioDurationSeconds = null,
-    GenerationFailureDetails? FailureDetails = null, AudioStorageFailureDetails? StorageFailureDetails = null);
+    GenerationFailureDetails? FailureDetails = null, AudioStorageFailureDetails? StorageFailureDetails = null,
+    string? FailureStage = null);
 public sealed record GenerationBatchResult(int PoiId, IReadOnlyList<LanguageGenerationResult> Results,
     IReadOnlyList<string> RemainingLanguages);
 public interface IContentGenerationService

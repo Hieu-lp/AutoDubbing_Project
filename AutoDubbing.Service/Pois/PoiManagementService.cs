@@ -42,7 +42,15 @@ public sealed class PoiManagementService(AppDbContext dbContext) : IPoiManagemen
             return null;
         }
 
+        var sourceVersion = poi.SourceVersion;
         Apply(poi, request);
+        if (poi.SourceVersion != sourceVersion)
+        {
+            var translations = await dbContext.Translations.Where(item => item.PointOfInterestId == id && item.Status == "Ready").ToListAsync(cancellationToken);
+            var audios = await dbContext.Audios.Where(item => item.PointOfInterestId == id && item.Status == "Ready").ToListAsync(cancellationToken);
+            foreach (var translation in translations) translation.Status = "Stale";
+            foreach (var audio in audios) audio.Status = "Stale";
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
         return PoiManagementResponse.FromEntity(poi);
     }
@@ -60,6 +68,8 @@ public sealed class PoiManagementService(AppDbContext dbContext) : IPoiManagemen
             await dbContext.Translations.AnyAsync(item => item.PointOfInterestId == id, cancellationToken)
             || await dbContext.Audios.AnyAsync(item => item.PointOfInterestId == id, cancellationToken)
             || await dbContext.UsageEvents.AnyAsync(item => item.PointOfInterestId == id, cancellationToken);
+        var routeLists = await dbContext.Routes.Where(route => route.Status != "Deleted").Select(route => route.PoiIdsJson).ToListAsync(cancellationToken);
+        hasDependents |= routeLists.Any(json => Routes.SavedRouteService.ParseIds(json) is not { } ids || ids.Contains(id));
         if (hasDependents)
         {
             return PoiDeleteResult.HasDependents;

@@ -13,12 +13,12 @@ export function useVisitorData(id: number | null, language: string, detailVisibl
     if (content) queryClient.setQueryData<PoiContent>(contentKey(content.poiId, content.requestedLanguage), previous =>
       isReady(previous, content.requestedLanguage) && !isReady(content, content.requestedLanguage) ? previous : content);
   }));
-  const pois = useQuery({ queryKey: ['pois'], queryFn: ({ signal }) => visitorApi.pois(signal) });
+  const pois = useQuery({ queryKey: ['pois'], queryFn: ({ signal }) => visitorApi.pois(signal), refetchInterval: 10_000 });
   const languages = useQuery({ queryKey: ['languages'], queryFn: ({ signal }) => visitorApi.languages(signal) });
   const settings = useQuery({ queryKey: ['proximity-settings'], queryFn: ({ signal }) => visitorApi.settings(signal) });
-  const detail = useQuery({ queryKey: ['poi', id], queryFn: ({ signal }) => visitorApi.detail(id!, signal), enabled: id !== null && detailVisible });
+  const detail = useQuery({ queryKey: ['poi', id], queryFn: ({ signal }) => visitorApi.detail(id!, signal), enabled: id !== null && detailVisible, refetchInterval: 10_000 });
   const content = useQuery({ queryKey: contentKey(id ?? 0, language),
-    queryFn: ({ signal }) => visitorApi.content(id!, language, signal), enabled: id !== null && detailVisible });
+    queryFn: ({ signal }) => visitorApi.content(id!, language, signal), enabled: id !== null && detailVisible, refetchInterval: 10_000 });
   useEffect(() => {
     preparation.setInterest('selection', id !== null && detailVisible ? [preparationKey(id, language)] : []);
     return () => preparation.setInterest('selection', []);

@@ -2,6 +2,7 @@ using AutoDubbing.API.Authentication;
 using AutoDubbing.API.Commands;
 using AutoDubbing.API.Background;
 using AutoDubbing.Service.ContentPreparation;
+using AutoDubbing.Service.Monitoring;
 using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Data.Repositories;
@@ -38,11 +39,13 @@ if (args is ["create-admin"])
 }
 
 builder.Services.AddScoped<IAdminAuthenticationService, AdminAuthenticationService>();
+builder.Services.AddScoped<AdminAccountService>();
 builder.Services.AddAdminJwtAuthentication();
 builder.Services.AddScoped<IPoiReadRepository, PoiReadRepository>();
 builder.Services.AddScoped<IPoiReadService, PoiReadService>();
 builder.Services.AddScoped<IPoiManagementService, PoiManagementService>();
 builder.Services.AddScoped<IRoutePreviewService, RoutePreviewService>();
+builder.Services.AddScoped<SavedRouteService>();
 builder.Services.Configure<OrsDirectionsOptions>(builder.Configuration.GetSection(OrsDirectionsOptions.SectionName));
 builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(client =>
     client.Timeout = Timeout.InfiniteTimeSpan)
@@ -53,6 +56,9 @@ builder.Services.AddScoped<IContentGenerationRepository, ContentGenerationReposi
 builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
 builder.Services.AddSingleton<GenerationCoordinator>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<VisitorPresence>();
+builder.Services.AddScoped<ActivityService>();
+builder.Services.AddScoped<SystemEventWriter>();
 builder.Services.AddOptions<ContentPreparationOptions>()
     .Bind(builder.Configuration.GetSection(ContentPreparationOptions.SectionName))
     .ValidateDataAnnotations()

@@ -44,12 +44,18 @@ public sealed class PoiReadService(IPoiReadRepository repository) : IPoiReadServ
     }
 
     public async Task<PoiContentDto?> ContentAsync(int id, string language, CancellationToken cancellationToken)
+        => await ReadContentAsync(id, language, false, cancellationToken);
+
+    public async Task<PoiContentDto?> ContentForAdminAsync(int id, string language, CancellationToken cancellationToken)
+        => await ReadContentAsync(id, language, true, cancellationToken);
+
+    private async Task<PoiContentDto?> ReadContentAsync(int id, string language, bool admin, CancellationToken cancellationToken)
     {
         if (!LanguageTags.TryNormalize(language, out var requestedLanguage))
         {
             throw new ArgumentException("Mã ngôn ngữ không hợp lệ.", nameof(language));
         }
-        var poi = await repository.FindPublishedAsync(id, cancellationToken);
+        var poi = admin ? await repository.FindForAdminAsync(id, cancellationToken) : await repository.FindPublishedAsync(id, cancellationToken);
         if (poi is null) { return null; }
         if (!LanguageTags.TryNormalize(poi.OriginalLanguage, out var originalLanguage))
         {
@@ -60,12 +66,16 @@ public sealed class PoiReadService(IPoiReadRepository repository) : IPoiReadServ
         if (requestedLanguage != originalLanguage)
         {
             translation = await repository.FindReadyTranslationAsync(id, requestedLanguage, cancellationToken);
+            if (translation?.SourceVersion is { } version && version != poi.SourceVersion) translation = null;
         }
         var actualLanguage = translation is null ? originalLanguage : requestedLanguage;
         var text = translation?.Text ?? poi.OriginalDescription;
         var audio = await repository.FindReadyAudioAsync(id, actualLanguage, cancellationToken);
         PoiAudioDto? audioDto = null;
+        var textHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
         if (audio is not null && Uri.TryCreate(audio.FilePath, UriKind.Absolute, out var audioUri)
+            && (audio.SourceVersion is null || audio.SourceVersion == poi.SourceVersion)
+            && (audio.TextHash is null || audio.TextHash == textHash)
             && audioUri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(audioUri.Host)
             && string.IsNullOrEmpty(audioUri.UserInfo)
             && (!GeneratedAudioPaths.IsManaged(audio.FilePath)

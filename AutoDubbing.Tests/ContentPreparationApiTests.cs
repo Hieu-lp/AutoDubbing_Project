@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AutoDubbing.Data.Contexts;
+using AutoDubbing.API.Controllers;
+using System.Net.Http.Headers;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Service.ContentGeneration;
 using AutoDubbing.Service.ContentPreparation;
@@ -13,6 +15,143 @@ namespace AutoDubbing.Tests;
 
 public sealed class ContentPreparationApiTests
 {
+    private static async Task<HttpClient> DashboardAdmin(AdminApiFactory factory)
+    {
+        await factory.SeedAdminAsync();
+        var client = factory.CreateHttpsClient();
+        using var response = await client.PostAsJsonAsync("/api/admin/auth/login", new { username = "Admin", password = factory.Password });
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", json.RootElement.GetProperty("accessToken").GetString());
+        return client;
+    }
+
+    [Fact]
+    public async Task Dashboard_requires_active_admin_and_empty_history_is_not_a_pipeline_failure()
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true, StartPreparationWorker = false };
+        using (var anonymous = factory.CreateHttpsClient())
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/admin/dashboard/summary")).StatusCode);
+        using var client = await DashboardAdmin(factory);
+        var result = (await client.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        Assert.Equal("online", result.Health.Pipeline);
+        Assert.False(result.Pipeline.IsBlocked);
+        Assert.Equal(0, result.Pipeline.Failed);
+        Assert.Empty(result.Pipeline.FailedJobs);
+        Assert.Empty(result.Pipeline.RecentErrors);
+        Assert.True(result.Pipeline.LogsAvailable);
+        Assert.True(result.Pipeline.History.LostOnRestart);
+        Assert.Equal(30, result.Pipeline.History.RetentionMinutes);
+        await factory.ChangeStatusAsync(1, "Locked");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/dashboard/summary")).StatusCode);
+        Assert.Equal(0, factory.GenerationHttp.TranslationCalls + factory.GenerationHttp.AudioCalls + factory.GenerationHttp.UploadCalls);
+    }
+
+    [Theory]
+    [InlineData(false, true, "GenerationNotConfigured")]
+    [InlineData(true, false, "GenerationPaused")]
+    public async Task Dashboard_reports_missing_configuration_or_disabled_generation_without_provider_calls(bool configured, bool enabled, string code)
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = configured, PreparationEnabled = enabled, StartPreparationWorker = false };
+        using var client = await DashboardAdmin(factory);
+        var result = (await client.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        Assert.Equal("warning", result.Health.Pipeline);
+        Assert.True(result.Pipeline.IsBlocked);
+        Assert.Contains(result.Pipeline.Reasons, reason => reason.Code == code && reason.RequiresOperatorAction);
+        Assert.Empty(result.Pipeline.FailedJobs);
+        Assert.Equal(0, factory.GenerationHttp.TranslationCalls + factory.GenerationHttp.AudioCalls + factory.GenerationHttp.UploadCalls);
+    }
+
+    [Fact]
+    public async Task Dashboard_failure_details_match_counter_even_with_empty_SQL_logs_and_later_success_keeps_history()
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true, StartPreparationWorker = false };
+        using var client = await DashboardAdmin(factory);
+        var poiId = await AddPoi(factory);
+        var queue = factory.Services.GetRequiredService<IContentPreparationQueue>();
+        var first = queue.Enqueue(poiId, "zh-hans", "a", true, true).Job!;
+        await queue.TakeAsync(default);
+        queue.Complete(first.Id, "Failed", true, "SupabaseObjectMismatch", failureStage: "upload");
+        var result = (await client.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        var failure = Assert.Single(result.Pipeline.FailedJobs);
+        Assert.Equal(result.Pipeline.Failed, result.Pipeline.FailedJobs.Count);
+        Assert.Equal(first.Id, failure.JobId);
+        Assert.Equal(poiId, failure.PoiId);
+        Assert.Equal("Fixture", failure.PoiName);
+        Assert.Equal("zh-hans", failure.Language);
+        Assert.Equal("upload", failure.Stage);
+        Assert.NotNull(failure.FailedAtUtc);
+        Assert.Equal("SupabaseObjectMismatch", failure.ErrorCode);
+        Assert.Empty(result.Pipeline.RecentErrors);
+        Assert.False(result.Pipeline.IsBlocked);
+        Assert.Equal("online", result.Health.Pipeline);
+        Assert.Null(failure.RecoveredAtUtc);
+        var retry = queue.Enqueue(poiId, "zh-hans", "a", true, true).Job!;
+        await queue.TakeAsync(default);
+        queue.Complete(retry.Id, "Ready", true);
+        result = (await client.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        Assert.Equal(1, result.Pipeline.Failed);
+        Assert.NotNull(Assert.Single(result.Pipeline.FailedJobs).RecoveredAtUtc);
+        Assert.False(result.Pipeline.IsBlocked);
+        Assert.Equal("online", result.Health.Pipeline);
+        Assert.Equal(0, factory.GenerationHttp.TranslationCalls + factory.GenerationHttp.AudioCalls + factory.GenerationHttp.UploadCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Dashboard_quota_block_is_distinct_from_history_and_infinite_wait_is_not_a_retry_date(bool needsOperator)
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true, StartPreparationWorker = false };
+        using var client = await DashboardAdmin(factory);
+        var queue = factory.Services.GetRequiredService<IContentPreparationQueue>();
+        var code = needsOperator ? "QuotaUnavailable" : "DailyQuotaExceeded";
+        var until = needsOperator ? DateTimeOffset.MaxValue : DateTimeOffset.UtcNow.AddMinutes(30);
+        var job = queue.Enqueue(1, "en", "a", false, true).Job!;
+        await queue.TakeAsync(default);
+        queue.Complete(job.Id, "QuotaExceeded", true, code, until, "tts");
+        queue.Block(code, until);
+        var result = (await client.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        Assert.True(result.Pipeline.IsBlocked);
+        Assert.Equal("warning", result.Health.Pipeline);
+        var reason = Assert.Single(result.Pipeline.Reasons, item => item.Code == code);
+        Assert.Equal(needsOperator, reason.RequiresOperatorAction);
+        Assert.Equal(needsOperator ? null : (DateTimeOffset?)until, reason.RetryAtUtc);
+        Assert.Equal(1, result.Pipeline.Failed);
+        Assert.Equal(code, Assert.Single(result.Pipeline.FailedJobs).ErrorCode);
+        Assert.Equal(0, factory.GenerationHttp.AudioCalls);
+    }
+
+    [Fact]
+    public async Task Dashboard_does_not_return_unclassified_errors_raw_SQL_logs_secrets_or_stacks()
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true, StartPreparationWorker = false };
+        using var client = await DashboardAdmin(factory);
+        var queue = factory.Services.GetRequiredService<IContentPreparationQueue>();
+        var job = queue.Enqueue(1, "en", "a", false, true).Job!;
+        await queue.TakeAsync(default);
+        queue.Complete(job.Id, "Failed", false, "sb_secret_DO_NOT_EXPOSE", failureStage: "Password=DO_NOT_EXPOSE");
+        queue.Block("Bearer DO_NOT_EXPOSE", DateTimeOffset.MaxValue);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.SystemLogs.Add(new SystemLog { Component = "DO_NOT_EXPOSE", Message = "Server=secret;Password=DO_NOT_EXPOSE; stack trace", Level = "error", OccurredAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+        var json = await client.GetStringAsync("/api/admin/dashboard/summary");
+        Assert.DoesNotContain("DO_NOT_EXPOSE", json);
+        Assert.DoesNotContain(factory.SigningKey, json);
+        Assert.DoesNotContain(client.DefaultRequestHeaders.Authorization!.Parameter!, json);
+        Assert.DoesNotContain("fixture-gemini-key", json);
+        Assert.DoesNotContain("sb_secret_fixture_key", json);
+        Assert.DoesNotContain("stack trace", json);
+        var result = JsonSerializer.Deserialize<AdminDashboardSummary>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        Assert.Equal("UnknownFailure", Assert.Single(result.Pipeline.FailedJobs).ErrorCode);
+        Assert.Null(Assert.Single(result.Pipeline.FailedJobs).Stage);
+        Assert.Single(result.Pipeline.RecentErrors);
+        Assert.True(result.Pipeline.LogsAvailable);
+    }
+
     private static async Task<int> AddPoi(AdminApiFactory factory, double latitude = 0, string status = "Published")
     {
         await using var scope = factory.Services.CreateAsyncScope();

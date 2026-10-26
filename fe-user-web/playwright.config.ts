@@ -12,8 +12,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
-  use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173',
+  use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:5174',
     channel: process.env.PLAYWRIGHT_CHANNEL ?? (process.platform === 'win32' ? 'msedge' : undefined),
     reducedMotion: 'reduce', launchOptions: { args: ['--no-proxy-server', '--mute-audio'] }, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
-  webServer: { command: 'npm run dev', url: 'http://localhost:5173', reuseExistingServer: !process.env.CI, timeout: 90_000 },
+  webServer: { command: 'npm run dev -- --port 5174', url: 'http://127.0.0.1:5174', reuseExistingServer: !process.env.CI, timeout: 90_000 },
 });

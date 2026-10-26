@@ -13,6 +13,23 @@ public sealed class ContentPreparationQueueTests
     }
 
     [Fact]
+    public async Task Snapshot_prunes_expired_failure_details_and_counters_without_new_admission()
+    {
+        var clock = new Clock();
+        var queue = new ContentPreparationQueue(Options.Create(new ContentPreparationOptions()), clock);
+        var job = queue.Enqueue(1, "en", "a", false, true).Job!;
+        await queue.TakeAsync(default);
+        queue.Complete(job.Id, "Failed", false, "GeminiTimeout", failureStage: "translation");
+        Assert.Equal(1, queue.Snapshot().Failed);
+        Assert.Equal("translation", Assert.Single(queue.Snapshot().Jobs).FailureStage);
+        clock.Now = clock.Now.AddMinutes(31);
+        var expired = queue.Snapshot();
+        Assert.Equal(0, expired.Failed);
+        Assert.Empty(expired.Jobs);
+        Assert.Equal(30, expired.RetentionMinutes);
+    }
+
+    [Fact]
     public async Task Concurrent_admissions_deduplicate_by_poi_language_and_source_revision()
     {
         var queue = new ContentPreparationQueue(Options.Create(new ContentPreparationOptions()), new Clock());

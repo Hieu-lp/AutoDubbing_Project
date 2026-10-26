@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AutoDubbing.Data.Contexts;
+using AutoDubbing.Data.Entities;
+using AutoDubbing.Data.Storage;
 using AutoDubbing.Service.Authentication;
 using AutoDubbing.Service.ContentGeneration;
 using AutoDubbing.Service.Languages;
@@ -89,6 +91,20 @@ public class ContentGenerationTests
         Assert.All(await db.Audios.ToArrayAsync(), a => Assert.Equal(2, a.Duration)); // PCM duration 1.000041... rounds up
     }
     [Fact]
+    public async Task Translation_failure_reports_actual_stage_without_attempting_tts_or_upload()
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true };
+        using var client = await Authenticated(factory);
+        var id = await Poi(factory);
+        factory.GenerationHttp.NextTranslationError = HttpStatusCode.Forbidden;
+        using var response = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
+        var result = Assert.Single((await response.Content.ReadFromJsonAsync<GenerationBatchResult>())!.Results);
+        Assert.Equal("translation", result.FailureStage);
+        Assert.False(result.TextReady);
+        Assert.Equal(0, factory.GenerationHttp.AudioCalls + factory.GenerationHttp.UploadCalls);
+    }
+
+    [Fact]
     public async Task Translation_survives_audio_failure_and_retry_does_not_translate_again()
     {
         await using var factory = new AdminApiFactory { GenerationConfigured = true };
@@ -99,6 +115,7 @@ public class ContentGenerationTests
         var result = await first.Content.ReadFromJsonAsync<GenerationBatchResult>();
         Assert.True(result!.Results[0].TextReady);
         Assert.False(result.Results[0].AudioReady);
+        Assert.Equal("tts", result.Results[0].FailureStage);
         Assert.Equal("Deferred", result.Results[1].Status);
         var fallback = await client.GetFromJsonAsync<PoiContentDto>($"/api/pois/{id}/content?language=ja");
         Assert.True(fallback!.IsFallback);
@@ -109,6 +126,73 @@ public class ContentGenerationTests
         Assert.Equal(1, factory.GenerationHttp.TranslationCalls);
         Assert.Equal(2, factory.GenerationHttp.AudioCalls);
     }
+    [Theory]
+    [InlineData("vi", true)]
+    [InlineData("zh-hans", true)]
+    [InlineData("zh-hans", false)]
+    public async Task Shared_legacy_object_uses_new_path_without_overwrite_and_reuses_cache(string language, bool hasCache)
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true };
+        using var client = await Authenticated(factory);
+        var id = await Poi(factory);
+        var text = language == "vi" ? "Nội dung gốc." : "Fixture translation (not real model output).";
+        var cacheKey = GeneratedAudioPaths.For(id, language, text);
+        var otherMachine = WavAudio.FromProvider(new byte[48000], "audio/l16;rate=24000").Wav;
+        var cached = WavAudio.FromProvider(new byte[48002], "audio/l16;rate=24000").Wav;
+        factory.GenerationHttp.SeedObject(cacheKey, otherMachine);
+        if (hasCache) await factory.Services.GetRequiredService<IAudioCache>().WriteAsync(cacheKey, cached, default);
+
+        using var response = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content",
+            new { languages = new[] { language } });
+        var result = await response.Content.ReadFromJsonAsync<GenerationBatchResult>();
+        Assert.Equal("Completed", Assert.Single(result!.Results).Status);
+        Assert.Equal(language == "vi" ? 0 : 1, factory.GenerationHttp.TranslationCalls);
+        Assert.Equal(hasCache ? 0 : 1, factory.GenerationHttp.AudioCalls);
+        Assert.Equal(1, factory.GenerationHttp.UploadCalls);
+        Assert.Equal(otherMachine, factory.GenerationHttp.ReadObject(cacheKey));
+        var uploadedPath = GeneratedAudioPaths.For(id, language, text, cached);
+        Assert.Equal(cached, factory.GenerationHttp.ReadObject(uploadedPath));
+        await using var scope = factory.Services.CreateAsyncScope();
+        var audio = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Audios.SingleAsync();
+        Assert.Equal(id, audio.PointOfInterestId);
+        Assert.Equal(language, audio.Language);
+        Assert.EndsWith("/" + uploadedPath, audio.FilePath);
+        var content = await client.GetFromJsonAsync<PoiContentDto>($"/api/pois/{id}/content?language={language}");
+        Assert.False(content!.IsFallback);
+        Assert.Equal(audio.FilePath, content!.Audio!.Url);
+        using var again = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content",
+            new { languages = new[] { language } });
+        Assert.Equal("SkippedReady", Assert.Single((await again.Content.ReadFromJsonAsync<GenerationBatchResult>())!.Results).Status);
+        Assert.Equal(1, factory.GenerationHttp.UploadCalls);
+        Assert.Equal(language == "vi" ? 0 : 1, factory.GenerationHttp.TranslationCalls);
+        Assert.Equal(hasCache ? 0 : 1, factory.GenerationHttp.AudioCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ready_legacy_and_rendition_urls_are_reused_without_generation(bool rendition)
+    {
+        await using var factory = new AdminApiFactory { GenerationConfigured = true };
+        using var client = await Authenticated(factory);
+        var id = await Poi(factory);
+        var path = rendition ? GeneratedAudioPaths.For(id, "vi", "Nội dung gốc.", new byte[44])
+            : GeneratedAudioPaths.For(id, "vi", "Nội dung gốc.");
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Audios.Add(new PoiAudio { PointOfInterestId = id, Language = "vi", Status = "Ready",
+                FilePath = "https://fixture.test/" + path });
+            await db.SaveChangesAsync();
+        }
+        using var response = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content",
+            new { languages = new[] { "vi" } });
+        Assert.Equal("SkippedReady", Assert.Single((await response.Content.ReadFromJsonAsync<GenerationBatchResult>())!.Results).Status);
+        var content = await client.GetFromJsonAsync<PoiContentDto>($"/api/pois/{id}/content?language=vi");
+        Assert.NotNull(content!.Audio);
+        Assert.Equal(0, factory.GenerationHttp.AudioCalls + factory.GenerationHttp.TranslationCalls + factory.GenerationHttp.UploadCalls);
+    }
+
     [Fact]
     public async Task Upload_failure_keeps_wav_cache_and_retry_only_uploads()
     {
@@ -119,6 +203,7 @@ public class ContentGenerationTests
         using var first = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
         var failed = await first.Content.ReadFromJsonAsync<GenerationBatchResult>();
         Assert.Equal("Failed", failed!.Results[0].Status);
+        Assert.Equal("upload", failed.Results[0].FailureStage);
         using var second = await client.PostAsJsonAsync($"/api/admin/pois/{id}/generate-content", new { languages = new[] { "en" } });
         var completed = await second.Content.ReadFromJsonAsync<GenerationBatchResult>();
         Assert.Equal("Completed", completed!.Results[0].Status);

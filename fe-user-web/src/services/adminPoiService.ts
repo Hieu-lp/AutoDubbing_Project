@@ -37,10 +37,21 @@ export interface AdminDashboardResponse {
     failed: number;
     errorRatePercent: number | null;
     avgResponseMs: number | null;
-    recentErrors: { component: string; message: string; occurredAtUtc: string }[];
+    recentErrors: { component: string; message: string; occurredAtUtc: string; poiId?: number | null; language?: string | null; jobId?: string | null; errorCode?: string | null; stage?: string | null }[];
+    logsAvailable?: boolean;
+    isBlocked?: boolean;
+    reasons?: { code: string; message: string; retryAtUtc: string | null; requiresOperatorAction: boolean }[];
+    history?: { startedAtUtc: string; retentionMinutes: number; maxCompletedJobs: number; lostOnRestart: boolean };
+    failedJobs?: {
+      jobId: string; poiId: number; poiName: string | null; language: string; status: string;
+      failedAtUtc: string | null; stage: string | null; errorCode: string; message: string;
+      retryAtUtc: string | null; requiresOperatorAction: boolean; recoveredAtUtc: string | null;
+    }[];
   };
   usage: {
     activeUsers: number | null;
+    activeWindowSeconds?: number;
+    activeUsersLostOnRestart?: boolean;
     autoPlayCount: number | null;
     manualPlayCount: number | null;
     listensByPoi: { poiId: number; name: string; count: number }[];
@@ -104,8 +115,8 @@ async function request<T>(path: string, token?: string, init?: RequestInit): Pro
   if (!response.ok) {
     let message = `Yêu cầu thất bại (${response.status}).`;
     try {
-      const problem = await response.json() as { detail?: string; title?: string };
-      message = problem.detail ?? problem.title ?? message;
+      const problem = await response.json() as { detail?: string; title?: string; errors?: Record<string, string[]> };
+      message = problem.detail ?? (problem.errors ? Object.values(problem.errors).flat().join(' ') : problem.title) ?? message;
     } catch {
       // Keep the HTTP status message when the server has no problem-details body.
     }
@@ -115,6 +126,7 @@ async function request<T>(path: string, token?: string, init?: RequestInit): Pro
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
+export { request as adminRequest };
 
 export class AdminApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -198,14 +210,21 @@ export async function getAdminDashboard(token: string): Promise<AdminDashboardRe
     requireDemoToken(token);
     return {
       generatedAtUtc: new Date().toISOString(),
-      health: { api: 'online', database: 'online', pipeline: 'warning' },
+      health: { api: 'online', database: 'online', pipeline: 'online' },
       pipeline: {
         queued: 3,
         processing: 1,
         failed: 1,
         errorRatePercent: 2.4,
         avgResponseMs: 286,
-        recentErrors: [{ component: 'Tạo audio', message: 'Audio demo chưa được tạo cho một ngôn ngữ.', occurredAtUtc: new Date(Date.now() - 5 * 60_000).toISOString() }],
+        recentErrors: [],
+        logsAvailable: true,
+        isBlocked: false,
+        reasons: [{ code: 'PastFailures', message: 'Có một lỗi demo trong lịch sử; pipeline vẫn nhận yêu cầu mới.', retryAtUtc: null, requiresOperatorAction: false }],
+        history: { startedAtUtc: new Date().toISOString(), retentionMinutes: 30, maxCompletedJobs: 256, lostOnRestart: true },
+        failedJobs: [{ jobId: '00000000-0000-0000-0000-000000000001', poiId: 1, poiName: 'POI demo', language: 'en', status: 'Failed',
+          failedAtUtc: new Date().toISOString(), stage: 'upload', errorCode: 'SupabaseTimeout', message: 'Hết thời gian chờ Supabase (dữ liệu demo).',
+          retryAtUtc: null, requiresOperatorAction: false, recoveredAtUtc: null }],
       },
       usage: {
         activeUsers: 12,

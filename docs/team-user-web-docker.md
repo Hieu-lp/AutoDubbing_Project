@@ -1,5 +1,64 @@
 # Frontend user web trong Docker — bước tích hợp local
 
+## Cập nhật tích hợp 7 thực thể (27/10/2026)
+
+Source mới có lộ trình gợi ý, quản lý tài khoản, sự kiện nghe và nhật ký SQL;
+schema mới bỏ Session tham quan. Xem [thiết kế/ERD hiện hành](backend-demo.md),
+[quản trị](admin-dashboard.md) và [lộ trình](walking-routes.md). Không suy ra
+container đang chạy đã cập nhật chỉ vì npm build hoặc test đạt.
+
+Trước migration demo: xác minh container/database local, số bản ghi và FK;
+backup SQL COPY_ONLY WITH CHECKSUM ra ngoài repo, RESTORE VERIFYONLY và thử
+restore/upgrade trên DB riêng. Migration giữ lộ trình, không xóa dữ liệu
+POI/bản dịch/audio/tài khoản/sự kiện/log. Không chạy Down để khôi phục Session;
+phải dùng backup. `schema.sql` là script idempotent đã bao gồm migration mới.
+
+Sau khi source/DB đã được kiểm tra, **bước triển khai kế tiếp** (không tự chạy
+trong lượt tích hợp) là build cả API/frontend, rồi recreate đúng hai dịch vụ
+`api user-web` bằng **Compose và project đang dùng**, giữ nguyên SQL/volume/
+env/key. Không `down -v`, không tạo stack khác hoặc import lại demo. Ví dụ
+với bộ hiện tại trên Windows:
+
+```powershell
+Set-Location 'D:\New folder\AutoDubbing_Project'
+docker build -t autodubbing-api:dev -f Dockerfile .
+docker build -t autodubbing-user-web:dev -f fe-user-web/Dockerfile.team .
+Set-Location 'D:\AutoDubbing-Handover'
+docker compose --env-file .env.team -f compose.handover.yaml up -d --no-deps --force-recreate api user-web
+```
+
+Không xuất image/checksum mới nếu chưa cần bàn giao snapshot. Dockerfile
+frontend ép `VITE_USE_MOCK_DATA=false`; thay biến runtime sau build không đổi
+bundle Vite. API/SQL và auth key tiếp tục nằm phía server.
+
+### Demo bốn thiết bị trong cùng mạng
+
+Trình duyệt chỉ gọi `/api` cùng origin; không dùng localhost của điện thoại
+để gọi máy chủ. Nginx chuyển tiếp API trong mạng Docker. Source Compose có
+`WEB_BIND_ADDRESS` mặc định 127.0.0.1; để LAN truy cập, đặt 0.0.0.0 khi triển
+khai và đồng bộ riêng dòng port user-web vào Compose bàn giao nếu nó còn
+hardcode loopback. Giữ SQL/API bind loopback. Dùng IP LAN của máy chủ ở cổng
+18081, không phải localhost của thiết bị. Kiểm tra firewall chỉ cho cổng web
+trên mạng riêng theo chính sách máy; không mở SQL ra LAN.
+
+GPS trình duyệt cần secure context và quyền vị trí: dùng cùng một HTTPS
+origin/reverse proxy/tunnel đã được cấu hình khi test GPS trên điện thoại.
+HTTP qua IP LAN có thể đọc/chọn điểm/phát thủ công nhưng không chứng minh GPS
+thật. Chọn điểm bản đồ luôn có nhãn vị trí đã chọn, không giả làm GPS.
+
+Mỗi phiên khách có mã ẩn danh riêng trong sessionStorage và heartbeat 30 giây
+khi trang đang hiển thị. Dashboard đếm mã hoạt động 60 giây, không đếm request;
+RAM này mất khi restart API. Thử nhiều context trình duyệt chỉ xác minh logic,
+không phải kiểm chứng bốn thiết bị vật lý, mạng LAN, HTTPS hoặc GPS thực địa.
+
+Demo lần lượt: admin sửa POI → user làm mới/đợi 10 giây; admin xuất bản gợi ý
+→ user chọn vị trí xuất phát rồi chọn gợi ý → hiện thứ tự/đường; admin sửa
+thứ tự → user nhận thay đổi và tính lại; admin ẩn/xóa → gợi ý/đường cũ bị gỡ.
+User phát audio → Sự kiện sử dụng/Dashboard tăng từ SQL; job lỗi → Nhật ký hệ
+thống cho biết POI/ngôn ngữ/job/bước nếu đã ghi nhận. API lỗi phải hiện lỗi
+hoặc dữ liệu cũ, không hiển thị danh sách mẫu. Không tự chạy batch/provider
+thật trong kiểm thử; chỉ thử cặp cụ thể sau khi được cho phép.
+
 Phạm vi: thêm frontend React/Vite đã có vào Compose SQL Server + API hiện tại. Chưa phải bộ bàn giao hoàn chỉnh cho máy mới.
 
 ## Các file trong gói

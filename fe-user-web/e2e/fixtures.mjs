@@ -19,13 +19,13 @@ function waveBytes() {
   data.writeUInt16LE(2,32);data.writeUInt16LE(16,34);data.write('data',36);data.writeUInt32LE(48000,40);return data;
 }
 export async function setup(page,{gps=true,...options}={}) {
-  const world={posts:[],routes:[],polls:0,reads:[],ready:true,routeError:false,readDelay:{},...options};
+  const world={posts:[],routes:[],events:[],heartbeats:[],savedRoutes:[],polls:0,reads:[],ready:true,routeError:false,readDelay:{},...options};
   await page.addInitScript(({gps})=>{
     window.__plays=[];window.__blockAudio=false;window.__cleared=0;
     const playing=new WeakMap();
     Object.defineProperty(HTMLMediaElement.prototype,'paused',{get(){return !playing.get(this);}});
     HTMLMediaElement.prototype.play=function(){window.__plays.push(this.src);if(window.__blockAudio)return Promise.reject(new DOMException('Blocked','NotAllowedError'));
-      playing.set(this,true);this.dispatchEvent(new Event('play'));return Promise.resolve();};
+      playing.set(this,true);this.dispatchEvent(new Event('play'));this.dispatchEvent(new Event('playing'));return Promise.resolve();};
     HTMLMediaElement.prototype.pause=function(){playing.set(this,false);this.dispatchEvent(new Event('pause'));};
     if(gps){
       const watchers=new Map();let id=0;
@@ -47,6 +47,9 @@ export async function setup(page,{gps=true,...options}={}) {
   await page.route('**/api/**',async route=>{
     const request=route.request();const url=new URL(request.url());const path=url.pathname;const body=request.postDataJSON();
     const respond=(json,status=200,headers={})=>route.fulfill({status,contentType:'application/json',headers,body:JSON.stringify(json)}).catch(()=>{});
+    if(path==='/api/visitor-heartbeat'){world.heartbeats.push(body);return route.fulfill({status:204});}
+    if(path==='/api/usage-events'){world.events.push(body);return route.fulfill({status:204});}
+    if(path==='/api/routes')return respond(world.savedRoutes);
     if(path==='/api/pois'&&world.listError)return respond({title:'Fixture unavailable'},500);
     if(path==='/api/pois')return respond(pois);
     if(path==='/api/languages')return respond(codes.map(code=>({code,displayName:code})));
@@ -64,7 +67,7 @@ export async function setup(page,{gps=true,...options}={}) {
         totalDistanceMeters:1234,totalDurationSeconds:777,attribution:'© ORS fixture / OSM',distanceType:'walking',provider:'openrouteservice'});
     }
     if(path.startsWith('/api/content-preparations/')){world.polls++;return respond(prepared(1,'vi',world.ready?'Ready':'Queued'),200,{'Retry-After':'3'});}
-    const match=path.match(/^\/api\/pois\/(\d+)(?:\/(content|prepare-content))?$/);
+    const match=path.match(/^\/api\/(?:admin\/)?pois\/(\d+)(?:\/(content|prepare-content))?$/);
     if(match){const id=Number(match[1]);if(!match[2])return respond(pois[id-1]);
       const language=url.searchParams.get('language')??body?.language;
       if(match[2]==='content'){

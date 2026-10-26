@@ -21,9 +21,10 @@ public sealed class ContentPreparationWorkerTests
         public Task<PreparationJob> TakeAsync(CancellationToken token) => inner.TakeAsync(token);
         public void Block(string code, DateTimeOffset until) => inner.Block(code, until);
         public PreparationQueueSnapshot Snapshot() => inner.Snapshot();
-        public void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null)
+        public void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null,
+            string? failureStage = null)
         {
-            inner.Complete(id, status, textReady, errorCode, retryAt);
+            inner.Complete(id, status, textReady, errorCode, retryAt, failureStage);
             Completion(id).TrySetResult(inner.Find(id)!);
         }
         private TaskCompletionSource<PreparationJob> Completion(Guid id) => finished.GetOrAdd(id,
@@ -46,6 +47,29 @@ public sealed class ContentPreparationWorkerTests
             var result = await generate(poiId, languages[0], token);
             return new(poiId, [result], result.AudioReady ? [] : [result.Language]);
         }
+    }
+
+    [Fact]
+    public async Task Worker_keeps_actual_failure_stage_but_does_not_guess_stage_for_jobs_blocked_before_execution()
+    {
+        var options = Options.Create(new ContentPreparationOptions());
+        var queue = new ObservedQueue(new ContentPreparationQueue(options, TimeProvider.System));
+        var generator = new Generator((_, language, _) => Task.FromResult(new LanguageGenerationResult(language,
+            "Failed", true, false, "SupabaseObjectMismatch", FailureStage: "upload")));
+        using var services = new ServiceCollection().AddSingleton<IContentGenerationService>(generator).BuildServiceProvider();
+        using var worker = new ContentPreparationWorker(queue, services.GetRequiredService<IServiceScopeFactory>(),
+            options, TimeProvider.System, NullLogger<ContentPreparationWorker>.Instance);
+        var first = queue.Enqueue(1, "en", "a", true, false).Job!;
+        var second = queue.Enqueue(2, "vi", "a", true, false).Job!;
+        await worker.StartAsync(default);
+        try
+        {
+            Assert.Equal("upload", (await queue.Wait(first.Id)).FailureStage);
+            Assert.Null((await queue.Wait(second.Id)).FailureStage);
+            Assert.Equal(1, generator.Calls);
+            Assert.Equal(2, queue.Snapshot().Failed);
+        }
+        finally { await worker.StopAsync(default); }
     }
 
     [Fact]

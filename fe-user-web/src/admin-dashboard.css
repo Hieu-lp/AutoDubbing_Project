@@ -1,4 +1,4 @@
-.admin-dashboard-refresh{min-height:36px;padding:0 11px;font-size:10px}
+.admin-dashboard-refresh{min-height:36px;padding:0 11px;font-size:10px;color:var(--dashboard-info)}
 .admin-monitoring-note{justify-content:space-between;flex-wrap:wrap}
 .admin-health-dot.health-online{border-color:#8ac9a8;background:#4cae77}
 .admin-health-dot.health-warning{border-color:#edcc84;background:#e4ac42}
@@ -6,23 +6,57 @@
 .admin-health-dot.health-unknown{border-color:#aab3c0;background:#eef0f3}
 .admin-dashboard-error-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #f0d8d5;border-radius:7px;background:#fff6f4;color:#a44e46;font-size:11px;line-height:1.5}
 .admin-dashboard-error-banner button{min-height:36px;padding:0 10px;border:1px solid #ebd0cc;border-radius:5px;background:#fff;color:#a44e46;font-size:10px}
-.admin-dashboard-state{padding:32px;border:1px dashed #dfe4eb;border-radius:8px;background:#fff;color:#788495;font-size:12px;text-align:center}
+.admin-dashboard-state{padding:32px;border:1px dashed #dfe4eb;border-radius:8px;background:#fff;color:var(--dashboard-muted);font-size:12px;text-align:center}
 .admin-dashboard-errors{margin-top:12px}
 .admin-dashboard-error-list,.admin-dashboard-breakdown{margin:0;padding:0;list-style:none}
 .admin-dashboard-error-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px 14px;border-top:1px solid #eff1f4}
 .admin-dashboard-error-mark{width:21px;height:21px;display:grid;place-items:center;border-radius:50%;background:#fff0ed;color:#bb5d51;font-size:11px;font-weight:700}
 .admin-dashboard-error-list li>div{min-width:0}
-.admin-dashboard-error-list strong{color:#4c596c;font-size:10px}
-.admin-dashboard-error-list p{margin:4px 0 0;color:#788495;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
-.admin-dashboard-error-list time{color:#929cab;font-size:9px;white-space:nowrap}
+.admin-dashboard-error-list strong{color:var(--dashboard-ink);font-size:10px}
+.admin-dashboard-error-list p{margin:4px 0 0;color:var(--dashboard-danger);font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.admin-dashboard-error-list time{color:var(--dashboard-muted);font-size:9px;white-space:nowrap}
 .admin-dashboard-panels,.admin-monitoring-panels{align-items:start}
 .admin-dashboard-breakdown{padding:5px 13px 10px}
 .admin-dashboard-breakdown li{min-height:36px;display:grid;grid-template-columns:minmax(80px,1fr) minmax(50px,1.4fr) 36px;align-items:center;gap:10px;border-bottom:1px solid #f0f2f5}
 .admin-dashboard-breakdown li:last-child{border-bottom:0}
-.admin-dashboard-breakdown-name{min-width:0;overflow:hidden;color:#667286;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
-.admin-dashboard-breakdown strong{color:#4c596c;font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
+.admin-dashboard-breakdown-name{min-width:0;overflow:hidden;color:var(--dashboard-body);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.admin-dashboard-breakdown strong{color:var(--dashboard-ink);font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
 .admin-dashboard-meter{height:6px;overflow:hidden;border-radius:5px;background:#eef1f5}
 .admin-dashboard-meter i{height:100%;display:block;border-radius:inherit;background:#6a8be0}
-.admin-dashboard-top-route{margin:-4px 0 0;color:#7e8998;font-size:10px}
-.admin-dashboard-top-route strong{color:#53627a}
+.admin-dashboard-top-route{margin:-4px 0 0;color:var(--dashboard-muted);font-size:10px}
+.admin-dashboard-top-route strong{color:var(--dashboard-ink)}
+.admin-failed-trigger{font:inherit;text-align:left;cursor:pointer}
+.admin-failed-trigger small{color:var(--dashboard-info);font-size:10px}
+.admin-failed-trigger:focus-visible{outline:2px solid #416bd1;outline-offset:3px}
+.admin-pipeline-reasons{padding:12px 14px;border:1px solid var(--admin-line);border-radius:8px;background:#fff;color:var(--dashboard-body);font-size:11px;line-height:1.6}
+.admin-pipeline-reasons strong{color:var(--dashboard-ink)}
+.admin-pipeline-reasons ul{margin:6px 0;padding-left:18px}
+.admin-pipeline-reasons p,.admin-job-history-scope{margin:7px 0 0;color:var(--dashboard-muted);font-size:10px;line-height:1.6}
+.admin-failed-job-list{margin:0;padding:0;list-style:none}
+.admin-failed-job-list li{padding:14px;border-top:1px solid #edf0f4;color:var(--dashboard-body);font-size:11px;overflow-wrap:anywhere}
+.admin-failed-job-list strong{color:var(--dashboard-ink)}
+.admin-failed-job-list dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:9px;margin:12px 0}
+.admin-failed-job-list dt{color:var(--dashboard-muted);font-size:10px}
+.admin-failed-job-list dd{margin:3px 0 0}
+.admin-failed-job-list p{margin:7px 0 0;line-height:1.6}
+.admin-failed-job-list .admin-job-recovered{color:var(--dashboard-success);font-weight:600}
 @media(max-width:760px){.admin-dashboard-breakdown li{grid-template-columns:minmax(70px,1fr) minmax(45px,1.1fr) 32px;gap:7px}.admin-dashboard-error-list li{grid-template-columns:22px minmax(0,1fr)}.admin-dashboard-error-list time{grid-column:2}}
+.admin-shell{--dashboard-ink:#172b4d;--dashboard-body:#334155;--dashboard-muted:#526175;--dashboard-info:#1d4ed8;--dashboard-success:#166534;--dashboard-warning:#92400e;--dashboard-danger:#b91c1c}
+.admin-monitoring{color:var(--dashboard-body)}
+.admin-content:has(.admin-monitoring) :is(.admin-overline,.admin-page-description){color:var(--dashboard-muted)}
+.admin-monitoring :is(h2,h3,.admin-health-card strong){color:var(--dashboard-ink)}
+.admin-monitoring :is(.admin-monitoring-note,.admin-monitoring-heading p,.admin-monitoring-unavailable,.admin-monitoring-panel>header>span,.admin-monitoring-empty,.admin-health-card>div>span,.admin-monitoring-stat>span){color:var(--dashboard-muted)}
+.admin-monitoring .admin-monitoring-stat>span{font-weight:600}
+.admin-monitoring .admin-monitoring-stat strong{color:var(--dashboard-info)}
+.admin-monitoring .admin-monitoring-stat[data-empty=true] strong{color:var(--dashboard-muted)}
+.admin-monitoring .admin-health-card>div>span{font-weight:650}
+.admin-monitoring .admin-health-card:has(.health-online)>div>span{color:var(--dashboard-success)}
+.admin-monitoring .admin-health-card:has(.health-warning)>div>span{color:var(--dashboard-warning)}
+.admin-monitoring .admin-health-card:has(.health-offline)>div>span{color:var(--dashboard-danger)}
+.admin-monitoring .admin-failed-trigger[data-has-errors=true]{border-color:#fecaca;background:#fff7f7}
+.admin-monitoring .admin-failed-trigger[data-has-errors=true]>span,.admin-monitoring .admin-failed-trigger[data-has-errors=true] strong{color:var(--dashboard-danger)}
+.admin-pipeline-reasons[data-state=blocked]{border-color:#fcd34d;background:#fffbeb}
+.admin-pipeline-reasons[data-state=blocked] strong{color:var(--dashboard-warning)}
+.admin-pipeline-reasons[data-state=open] strong{color:var(--dashboard-success)}
+.admin-pipeline-reasons[data-state=unknown] strong{color:var(--dashboard-muted)}
+.admin-job-error-code[data-known=true]{color:var(--dashboard-danger);font-weight:650}

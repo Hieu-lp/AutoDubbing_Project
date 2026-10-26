@@ -113,3 +113,22 @@ Không chạy suite live trong CI. Test live vẫn mô phỏng geolocation bằn
 Các ca `LIVE map:` dùng đồng hồ và API/audio thật nhưng tự chọn điểm, có POST nearby và có giả định dữ liệu của lượt kiểm chứng cũ; chỉ chạy sau khi chuẩn bị phạm vi/cấu hình riêng phù hợp. Không chạy chúng để dò thêm dữ liệu khi demo true. Ca ép `NotAllowedError` và GPS mô phỏng được ghi nhãn; `position-evidence.json` ghi tọa độ, dwell, request và kết quả phát. Nếu sandbox chặn mạng tới kho audio, chạy từ PowerShell thông thường; Node cần `--use-system-ca` như launcher frontend. Không bỏ kiểm tra TLS hoặc thay audio thật bằng fixture để báo đạt.
 
 Giới hạn backend giữ nguyên: một instance; queue/jobId/cooldown mất khi restart; bản dịch lịch sử chưa có revision nguồn trong schema. Hợp đồng chi tiết: [nội dung theo yêu cầu](../docs/content-on-demand.md), [tuyến ORS](../docs/walking-routes.md).
+# Tích hợp quản trị và dữ liệu hiện hành (27/10/2026)
+
+`/admin` có quản lý tài khoản, POI, bản dịch/audio, lộ trình gợi ý, sự kiện và
+nhật ký SQL; không còn nghiệp vụ Session tham quan. Xem hướng dẫn hiện hành
+ở [admin-dashboard.md](../docs/admin-dashboard.md). User mở **Lộ trình gợi ý**
+để đọc lộ trình admin xuất bản; chọn điểm xuất phát trước rồi chọn gợi ý để
+tính đường theo thứ tự đã lưu. Khách tự chọn POI vẫn dùng heuristic gần nhất.
+
+Danh sách POI và dữ liệu POI đang mở được làm mới 10 giây; gợi ý làm mới khi
+mở/focus và mỗi 10 giây khi đang xem/đã chọn. Route bị ẩn/xóa hoặc POI mất
+công khai sẽ gỡ lựa chọn/đường cũ, không cần xóa browser cache. Không tự vẽ
+đường mẫu nếu API/ORS lỗi. Sự kiện nghe chỉ gửi khi media `playing`, có mã
+chống trùng; lỗi thống kê không cản audio. Admin nghe thử không tính lượt khách.
+
+Để demo thật giữ `VITE_USE_MOCK_DATA=false`, API/DB cần migration mới. Container
+18081 phục vụ build tĩnh và không tự cập nhật theo source. [Hướng dẫn Docker
+và LAN/HTTPS bốn thiết bị](../docs/team-user-web-docker.md) phân biệt các bước
+triển khai với kết quả kiểm thử. Playwright dùng cổng riêng 5174 và provider
+fixture; không coi kết quả mock là chứng nhận dịch/TTS/GPS/thiết bị thật.

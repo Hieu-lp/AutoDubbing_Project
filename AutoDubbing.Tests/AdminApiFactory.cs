@@ -32,6 +32,7 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
     public bool PreparationEnabled { get; init; } = true;
     public bool StartPreparationWorker { get; init; } = true;
     public bool ExposeOpenApi { get; init; }
+    public string? SqlServerTestConnection { get; init; }
     public ContentGenerationHttpStub GenerationHttp { get; } = new();
     public OrsHttpStub RoutingHttp { get; } = new();
     public CapturingLoggerProvider CapturedLogs { get; } = new();
@@ -78,7 +79,14 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
             connection.CreateFunction<string, int>("DATALENGTH", value => Encoding.Unicode.GetByteCount(value));
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
-            services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection)
+            if (SqlServerTestConnection is { } testConnection)
+            {
+                var parsed = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(testConnection);
+                if (parsed.DataSource != "127.0.0.1,11433" || !parsed.InitialCatalog.StartsWith("AutoDubbing_Seven_Fresh_", StringComparison.Ordinal))
+                    throw new InvalidOperationException("SQL tests require an explicitly named local disposable test database.");
+                services.AddDbContext<AppDbContext>(options => options.UseSqlServer(testConnection));
+            }
+            else services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection)
                 .ReplaceService<IModelCustomizer, SqliteTestModelCustomizer>());
         });
     }
@@ -94,7 +102,7 @@ internal sealed class AdminApiFactory(string? signingKeyOverride = null, bool om
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (db.Database.ProviderName != "Microsoft.EntityFrameworkCore.Sqlite")
+        if (db.Database.ProviderName != "Microsoft.EntityFrameworkCore.Sqlite" && SqlServerTestConnection is null)
         {
             throw new InvalidOperationException("Test chỉ được ghi vào SQLite in-memory.");
         }

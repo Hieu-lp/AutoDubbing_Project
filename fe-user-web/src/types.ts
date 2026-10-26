@@ -24,6 +24,12 @@ export interface Coordinates {
   timestamp?: number;
 }
 
+export interface SavedRoute {
+  id: number; name: string; poiIds: number[]; status: 'Published' | 'Hidden'; updatedAtUtc: string;
+  pois: { id: number; name: string; latitude: number; longitude: number; isPublic: boolean }[];
+  unavailablePoiIds: number[]; version: string;
+}
+
 export type VisitorLocation = Coordinates & { source: 'gps' | 'map' };
 
 export interface NearbyPoi extends Poi {

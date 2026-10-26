@@ -1,5 +1,68 @@
 # Backend cốt lõi cho demo du khách
 
+## Thiết kế hiện hành / PRD và ERD (27/10/2026)
+
+Hệ thống có **7 thực thể nghiệp vụ**. Session tham quan do admin tạo đã bị
+loại bỏ; lộ trình độc lập. `sessionStorage` xác thực, mã khách ẩn danh và
+trạng thái lượt tham quan trên frontend không phải bảng Session.
+
+```mermaid
+erDiagram
+    NGUOI_DUNG ||--o{ POI : quan_ly
+    NGUOI_DUNG o|--o{ NHAT_KY_HE_THONG : thao_tac
+    POI ||--o{ BAN_DICH : ban_dich
+    POI ||--o{ AUDIO : audio
+    POI o|--o{ SU_KIEN_SU_DUNG : luot_nghe
+    LO_TRINH o|--o{ SU_KIEN_SU_DUNG : su_dung
+    LO_TRINH {
+        int id PK
+        string ten
+        json danh_sach_poi
+        string trang_thai
+        datetime thoi_diem_cap_nhat
+    }
+    SU_KIEN_SU_DUNG {
+        int id PK
+        int poi_id FK
+        int lo_trinh_id FK
+        uuid event_id UK
+        uuid guest_id
+        string loai_su_kien
+        string ngon_ngu
+        datetime thoi_diem
+    }
+```
+
+Danh sách POI của lộ trình là JSON có thứ tự; không phải quan hệ N-N tự động.
+Service kiểm tra ID tồn tại/không trùng; lộ trình công khai chỉ chứa POI công
+khai. Xóa lộ trình là xóa mềm (`Deleted`) để giữ lịch sử sử dụng. Xóa POI bị
+chặn khi còn nội dung, lịch sử hoặc lộ trình đang tham chiếu, không cascade.
+
+- Admin: đăng nhập/tài khoản, CRUD POI, đọc và chuẩn bị bản dịch/audio, quản lý
+  lộ trình xuất bản, xem sự kiện và nhật ký SQL. Mọi tài khoản hiện là Admin;
+  không được khóa admin Active cuối cùng. API không trả password hash.
+- Khách: không cần tài khoản; xem POI/lộ trình công khai, chọn lộ trình gợi ý
+  hoặc tự chọn điểm; nghe và tạo sự kiện khi media thực sự bắt đầu phát.
+- Mô tả nguồn vẫn ở `POI.mo_ta_goc`. Thay tên/ngôn ngữ/mô tả nguồn đánh dấu
+  bản dịch/audio cũ `Stale`, không xóa file. Bản mới lưu `context_version`;
+  audio lưu thêm `text_hash`. Bản legacy chưa có version được giữ cho đến khi
+  có thay đổi nguồn qua API; không coi đó là chứng nhận chất lượng dịch.
+- Dashboard: dữ liệu sử dụng và log từ SQL; queue/cooldown và khách hoạt động
+  60 giây nằm trong RAM. Không suy ra người dùng từ số request. Số liệu
+  chưa thu thập như thời gian phản hồi trung bình vẫn hiển thị chưa hỗ trợ.
+
+Migration `20261026201819_RemoveTourSessionAndCompleteIntegration` chỉ bỏ
+FK/index/cột liên quan Session và bảng Session, bổ sung metadata cần thiết;
+giữ bảng và bản ghi lộ trình. Lịch sử migration cũ giữ nguyên. `Down` chủ động
+từ chối rollback vì không thể phục hồi dữ liệu Session đã xóa; cần restore
+bản backup đã kiểm tra. Thử cài mới/nâng cấp trên DB riêng, backup COPY_ONLY
+CHECKSUM và xác minh đúng DB local trước khi cập nhật demo. Script
+`scripts/team/schema.sql` là lịch sử idempotent: có DDL Session cũ rồi migration
+loại bỏ; thiết kế cuối cùng không còn Session.
+
+Các kết quả kiểm chứng có ngày ở phần dưới là **lịch sử**, không thay thế
+việc kiểm tra source/database/container đang phục vụ hôm nay.
+
 **Yêu cầu mới 24/10/2026:** ngoài GET chỉ đọc, khách ẩn danh có hai POST chuẩn bị nội dung qua hàng đợi giới hạn. Chỉ audio nguồn được chuẩn bị khi POI vào 500 m; ngoại ngữ chỉ theo lựa chọn chủ động. Dừng batch 120 audio. Hợp đồng hiện hành, cấu hình tạm dừng vì quota và tích hợp frontend 50 m/3 giây ở [content-on-demand.md](content-on-demand.md). Số liệu live phía dưới là lịch sử, không phải trạng thái hôm nay.
 
 Phạm vi gồm đọc POI, nội dung/bản dịch/audio đã có và xem trước thứ tự ghé POI. Các API dưới đây cho phép truy cập ẩn danh, trả DTO, không trả thông tin Admin. Phần đăng nhập hiện có được giữ; cách cấu hình JWT và tạo Admin đầu tiên nằm trong [admin-auth.md](admin-auth.md).

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PoiContent } from '../types';
 import { isReady, preparationKey } from '../services/api';
 import { tourDiagnostic } from '../tour/diagnostics';
+import { eventId, recordPlayback } from '../services/usageService';
 
-export function useAudioPlayer(selectionKey: string | null, content?: PoiContent) {
+export function useAudioPlayer(selectionKey: string | null, content?: PoiContent, trackUsage = false) {
   const ref = useRef<HTMLAudioElement>(null);
   const active = useRef<{ key: string; url: string } | null>(null);
   const sequence = useRef(0);
   const pending = useRef<number | null>(null);
+  const listening = useRef<{ id: string; content: PoiContent; kind: 'auto' | 'manual'; sent: boolean; valid: () => boolean } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -19,6 +21,7 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
     sequence.current++; pending.current = null; ref.current?.pause(); setIsPlaying(false);
   }, []);
   const stop = useCallback(() => {
+    listening.current = null;
     sequence.current++; pending.current = null;
     if (ref.current) { ref.current.pause(); ref.current.currentTime = 0; }
     setIsPlaying(false); setCurrentTime(0); setError('');
@@ -30,18 +33,26 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
     const update = () => setCurrentTime(Number.isFinite(player.currentTime) ? player.currentTime : 0);
     const loaded = () => setDuration(Number.isFinite(player.duration) ? player.duration : 0);
     const playing = () => setIsPlaying(true);
+    const began = () => {
+      const attempt = listening.current;
+      if (trackUsage && attempt && !attempt.sent && attempt.valid() && active.current?.key === preparationKey(attempt.content.poiId, attempt.content.requestedLanguage)) {
+        attempt.sent = true; void recordPlayback(attempt.content, attempt.kind, attempt.id);
+      }
+    };
     const paused = () => setIsPlaying(false);
     const failed = () => { setIsPlaying(false); if (active.current) setError('Không tải được audio. Bạn vẫn có thể đọc nội dung và thử phát lại.'); };
     player.addEventListener('timeupdate', update); player.addEventListener('loadedmetadata', loaded);
     player.addEventListener('play', playing); player.addEventListener('pause', paused);
+    player.addEventListener('playing', began);
     player.addEventListener('ended', paused); player.addEventListener('error', failed);
     return () => {
       invalidatePlay(); player.pause(); player.removeAttribute('src'); player.load();
       player.removeEventListener('timeupdate', update); player.removeEventListener('loadedmetadata', loaded);
       player.removeEventListener('play', playing); player.removeEventListener('pause', paused);
+      player.removeEventListener('playing', began);
       player.removeEventListener('ended', paused); player.removeEventListener('error', failed);
     };
-  }, [invalidatePlay]);
+  }, [invalidatePlay, trackUsage]);
   useEffect(() => {
     if (active.current?.key !== selectionKey) { stop(); active.current = null; setDuration(0); }
   }, [selectionKey, stop]);
@@ -57,7 +68,7 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
       stop(); setDuration(0); active.current = { key, url: content.audio!.url }; player.src = content.audio!.url;
     }
   }, [content, selectionKey, stop]);
-  const play = useCallback(async (next: PoiContent, valid: () => boolean = () => true): Promise<boolean> => {
+  const play = useCallback(async (next: PoiContent, valid: () => boolean = () => true, kind: 'auto' | 'manual' = 'manual'): Promise<boolean> => {
     if (!isReady(next, next.requestedLanguage) || !ref.current || !valid()) return false;
     const player = ref.current; const attempt = ++sequence.current;
     const key = preparationKey(next.poiId, next.requestedLanguage); const url = next.audio!.url;
@@ -65,6 +76,7 @@ export function useAudioPlayer(selectionKey: string | null, content?: PoiContent
       player.pause(); player.src = url; setCurrentTime(0); setDuration(0); active.current = { key, url };
     }
     setError('');
+    listening.current = { id: eventId(), content: next, kind, sent: false, valid };
     pending.current = attempt;
     tourDiagnostic('audio-play', { poiId: next.poiId, language: next.actualLanguage, path: new URL(url, location.href).pathname });
     try {

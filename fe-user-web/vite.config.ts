@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       if (name.includes('node_modules/leaflet/') || name.includes('node_modules/react-leaflet/') || name.includes('node_modules/@react-leaflet/')) return 'map';
       if (name.includes('node_modules/')) return 'vendor';
     } } } },
-    server: { host: '0.0.0.0', port: 5173, strictPort: true, proxy,
+    server: { host: '0.0.0.0', port: 5173, strictPort: true, allowedHosts: ['.trycloudflare.com'], proxy,
       watch: { ignored: ['**/playwright-report/**', '**/test-results/**', '**/e2e/**', '**/tests/**'] } },
     preview: { host: '0.0.0.0', port: 4173, strictPort: true, proxy },
   };

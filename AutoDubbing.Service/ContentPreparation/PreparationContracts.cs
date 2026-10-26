@@ -26,9 +26,7 @@ public sealed class ContentPreparationOptions
 public static class SourceVersion
 {
     // Include the POI name because it is also an input to the translation prompt.
-    public static string For(PointOfInterest poi) => Convert.ToHexStringLower(SHA256.HashData(
-        Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(
-            new[] { poi.OriginalLanguage, poi.Name, poi.OriginalDescription }))));
+    public static string For(PointOfInterest poi) => poi.SourceVersion;
 }
 
 /// <summary>Current state of one requested language. Fallback content is explicitly identified.</summary>
@@ -57,19 +55,26 @@ public interface IContentPreparationService
 
 public sealed record PreparationJob(Guid Id, int PoiId, string Language, string SourceVersion,
     string Status, bool TextReady, string? ErrorCode, DateTimeOffset? RetryAt,
-    DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, bool Interactive);
+    DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, bool Interactive, string? FailureStage = null);
 
 public sealed record QueueAdmission(PreparationJob? Job, string? ErrorCode = null,
     DateTimeOffset? RetryAt = null);
 
-public sealed record PreparationQueueSnapshot(int Queued, int Processing, int Failed);
+public sealed record PreparationQueueSnapshot(int Queued, int Processing, int Failed,
+    IReadOnlyList<PreparationJob> Jobs, string? BlockCode, DateTimeOffset? BlockUntil,
+    DateTimeOffset StartedAt, int RetentionMinutes, int RetainedJobs)
+{
+    public static bool IsFailure(PreparationJob job) =>
+        job.FinishedAt is not null && (job.Status is "Failed" or "Unavailable" or "QuotaExceeded");
+}
 
 public interface IContentPreparationQueue
 {
     QueueAdmission Enqueue(int poiId, string language, string sourceVersion, bool textReady, bool interactive);
     PreparationJob? Find(Guid id);
     Task<PreparationJob> TakeAsync(CancellationToken token);
-    void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null);
+    void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null,
+        string? failureStage = null);
     void Block(string errorCode, DateTimeOffset until);
     PreparationQueueSnapshot Snapshot();
     (string Code, DateTimeOffset Until)? CurrentBlock { get; }

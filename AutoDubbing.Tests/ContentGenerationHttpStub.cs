@@ -15,9 +15,12 @@ internal sealed class ContentGenerationHttpStub : HttpMessageHandler
     public int AudioCalls;
     public int UploadCalls;
     public HttpStatusCode? NextAudioError { get; set; }
+    public HttpStatusCode? NextTranslationError { get; set; }
     public HttpStatusCode? NextUploadError { get; set; }
     public bool FailNextPublicReadAfterUpload { get; set; }
     private readonly ConcurrentDictionary<string, byte[]> objects = new();
+    public void SeedObject(string path, byte[] bytes) => objects[path] = bytes;
+    public byte[]? ReadObject(string path) => objects.GetValueOrDefault(path);
     public ConcurrentQueue<string> SpeechInputs { get; } = new();
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
     {
@@ -55,6 +58,7 @@ internal sealed class ContentGenerationHttpStub : HttpMessageHandler
         if (url.AbsolutePath.Contains(GeminiOptions.TranslationModel, StringComparison.Ordinal))
         {
             Interlocked.Increment(ref TranslationCalls);
+            if (NextTranslationError is { } error) { NextTranslationError = null; return new(error); }
             return Json(new { candidates = new[] { new { finishReason = "STOP", content = new {
                 parts = new[] { new { text = "Fixture translation (not real model output)." } } } } } });
         }

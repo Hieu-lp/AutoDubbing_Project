@@ -17,7 +17,7 @@ interface GuideInput {
   onLocation: (point: VisitorLocation | null) => void;
   onGpsState: (state: 'loading' | 'ready' | 'denied' | 'error', message: string) => void;
   onAutoSelect: (poi: Poi) => void;
-  player: { play: (content: PoiContent, valid: () => boolean) => Promise<boolean>; stop: () => void;
+  player: { play: (content: PoiContent, valid: () => boolean, kind?: 'auto' | 'manual') => Promise<boolean>; stop: () => void;
     cancelPending: () => void; busy: () => boolean };
 }
 
@@ -166,7 +166,7 @@ export function useTourGuide(input: GuideInput) {
     const attempt = { id: candidate.id, valid }; playing.current = attempt;
     attempted.current.add(candidate.id);
     current.onAutoSelect(candidate);
-    void current.player.play(content, valid).then(success => {
+    void current.player.play(content, valid, 'auto').then(success => {
       if (success) heard.current.add(candidate.id);
       tourDiagnostic('autoplay-result', { poiId: candidate.id, success, heard: [...heard.current] });
     })

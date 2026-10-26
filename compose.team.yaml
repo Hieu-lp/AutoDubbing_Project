@@ -55,7 +55,7 @@ services:
       api:
         condition: service_started
     ports:
-      - "127.0.0.1:18081:80"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:18081:80"
     restart: unless-stopped
 
 volumes:

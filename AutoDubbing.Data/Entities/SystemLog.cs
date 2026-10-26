@@ -11,6 +11,11 @@ public class SystemLog
     public string Level { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public DateTime OccurredAt { get; set; }
+    public int? PointOfInterestId { get; set; }
+    public string? Language { get; set; }
+    public Guid? JobId { get; set; }
+    public string? Stage { get; set; }
+    public string? ErrorCode { get; set; }
 
     public AdminUser? User { get; set; }
 }

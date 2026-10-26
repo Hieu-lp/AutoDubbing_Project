@@ -1,5 +1,6 @@
-﻿USE [AutoDubbingDb];
+USE [AutoDubbingDb];
 GO
+-- Idempotent migration history; final schema has seven business entities and no tour Session.
 IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [__EFMigrationsHistory] (
@@ -294,6 +295,191 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261019172708_ConfigureAdminAuthentication', N'10.0.13');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [LO_TRINH] DROP CONSTRAINT [FK_LO_TRINH_SESSION_session_id];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    DROP TABLE [SESSION];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    DROP INDEX [IX_LO_TRINH_session_id] ON [LO_TRINH];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    DECLARE @var2 nvarchar(max);
+    SELECT @var2 = QUOTENAME([d].[name])
+    FROM [sys].[default_constraints] [d]
+    INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+    WHERE ([d].[parent_object_id] = OBJECT_ID(N'[LO_TRINH]') AND [c].[name] = N'session_id');
+    IF @var2 IS NOT NULL EXEC(N'ALTER TABLE [LO_TRINH] DROP CONSTRAINT ' + @var2 + ';');
+    ALTER TABLE [LO_TRINH] DROP COLUMN [session_id];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    DECLARE @var3 nvarchar(max);
+    SELECT @var3 = QUOTENAME([d].[name])
+    FROM [sys].[default_constraints] [d]
+    INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+    WHERE ([d].[parent_object_id] = OBJECT_ID(N'[SU_KIEN_SU_DUNG]') AND [c].[name] = N'poi_id');
+    IF @var3 IS NOT NULL EXEC(N'ALTER TABLE [SU_KIEN_SU_DUNG] DROP CONSTRAINT ' + @var3 + ';');
+    ALTER TABLE [SU_KIEN_SU_DUNG] ALTER COLUMN [poi_id] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [SU_KIEN_SU_DUNG] ADD [event_id] uniqueidentifier NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [SU_KIEN_SU_DUNG] ADD [guest_id] uniqueidentifier NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [SU_KIEN_SU_DUNG] ADD [lo_trinh_id] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [NHAT_KY_HE_THONG] ADD [buoc] nvarchar(32) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [NHAT_KY_HE_THONG] ADD [job_id] uniqueidentifier NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [NHAT_KY_HE_THONG] ADD [ma_loi] nvarchar(80) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [NHAT_KY_HE_THONG] ADD [ngon_ngu] nvarchar(35) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [NHAT_KY_HE_THONG] ADD [poi_id] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [LO_TRINH] ADD [thoi_diem_cap_nhat] datetime2 NOT NULL DEFAULT '0001-01-01T00:00:00.0000000';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [BAN_DICH] ADD [context_version] nvarchar(64) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [AUDIO] ADD [context_version] nvarchar(64) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [AUDIO] ADD [text_hash] nvarchar(64) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_SU_KIEN_SU_DUNG_event_id] ON [SU_KIEN_SU_DUNG] ([event_id]) WHERE [event_id] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    CREATE INDEX [IX_SU_KIEN_SU_DUNG_lo_trinh_id] ON [SU_KIEN_SU_DUNG] ([lo_trinh_id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    ALTER TABLE [SU_KIEN_SU_DUNG] ADD CONSTRAINT [FK_SU_KIEN_SU_DUNG_LO_TRINH_lo_trinh_id] FOREIGN KEY ([lo_trinh_id]) REFERENCES [LO_TRINH] ([id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026201819_RemoveTourSessionAndCompleteIntegration'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261026201819_RemoveTourSessionAndCompleteIntegration', N'10.0.13');
 END;
 
 COMMIT;

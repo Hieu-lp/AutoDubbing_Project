@@ -38,10 +38,14 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
                 token.ThrowIfCancellationRequested();
                 var language = LanguageCatalog.Find(code)!;
                 var translation = language.Code == "vi" ? null : await read.FindReadyTranslationAsync(poiId, language.Code, token);
+                if (translation?.SourceVersion is { } version && version != poi.SourceVersion) translation = null;
                 var text = language.Code == "vi" ? source : translation?.Text;
                 var textReady = !string.IsNullOrWhiteSpace(text);
                 var audio = textReady ? await read.FindReadyAudioAsync(poiId, language.Code, token) : null;
+                var transcriptHash = textReady ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text!))) : null;
                 if (audio is not null && GeneratedAudioPaths.IsHttps(audio.FilePath)
+                    && (audio.SourceVersion is null || audio.SourceVersion == poi.SourceVersion)
+                    && (audio.TextHash is null || audio.TextHash == transcriptHash)
                     && (!GeneratedAudioPaths.IsManaged(audio.FilePath)
                         || GeneratedAudioPaths.Matches(audio.FilePath, poiId, language.Code, text!)))
                 {
@@ -55,29 +59,40 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
                 }
                 attempted++;
                 await coordinator.Slots.WaitAsync(token);
+                var stage = "translation";
                 try
                 {
                     if (!textReady)
                     {
                         text = await provider.TranslateAsync(source, poi.Name, language, token);
                         if (string.IsNullOrWhiteSpace(text)) throw new GenerationException("InvalidTranslation");
-                        if (!await write.SaveTranslationAsync(poiId, language.Code, text, source, token))
+                        stage = "persistence";
+                        if (!await write.SaveTranslationAsync(poiId, language.Code, text, source, token, poi.SourceVersion))
                             throw new GenerationException("SourceChanged");
                         textReady = true;
                     }
                     var path = GeneratedAudioPaths.For(poiId, language.Code, text!);
+                    stage = "cache";
                     var cached = await cache.ReadAsync(path, token);
+                    stage = cached is null ? "tts" : "cache";
                     var generated = cached is null ? await provider.SpeakAsync(text!, language, token)
                         : WavAudio.FromProvider(cached, "audio/wav");
                     // Validate container/duration ourselves before uploading or saving SQL metadata.
                     generated = WavAudio.FromProvider(generated.Wav, "audio/wav");
                     if (generated.Wav.Length > 6 * 1024 * 1024) throw new GenerationException("AudioTooLarge");
-                    if (cached is null) await cache.WriteAsync(path, generated.Wav, token);
-                    var url = await storage.UploadAsync(path, generated.Wav, token);
+                    if (cached is null)
+                    {
+                        stage = "cache";
+                        await cache.WriteAsync(path, generated.Wav, token);
+                    }
+                    var uploadPath = GeneratedAudioPaths.For(poiId, language.Code, text!, generated.Wav);
+                    stage = "upload";
+                    var url = await storage.UploadAsync(uploadPath, generated.Wav, token);
                     if (!GeneratedAudioPaths.Matches(url, poiId, language.Code, text!))
                         throw new GenerationException("InvalidUploadedAudioUrl");
+                    stage = "persistence";
                     if (!await write.SaveAudioAsync(poiId, language.Code, text!, source, url,
-                            checked((int)Math.Ceiling(generated.DurationSeconds)), token))
+                            checked((int)Math.Ceiling(generated.DurationSeconds)), token, poi.SourceVersion))
                         throw new GenerationException("SourceChanged");
                     results.Add(new(language.Code, "Completed", true, true, AudioDurationSeconds: generated.DurationSeconds));
                     // Preserve cached WAVs as well as SQL/storage results; no automatic cleanup in this flow.
@@ -85,18 +100,18 @@ public sealed class ContentGenerationService(IPoiReadRepository read, IContentGe
                 catch (GenerationException error)
                 {
                     results.Add(new(language.Code, error.Code == "QuotaExceeded" ? "PausedQuota" : "Failed", textReady, false,
-                        error.Code, FailureDetails: error.Details));
+                        error.Code, FailureDetails: error.Details, FailureStage: stage));
                     paused = error.Code is "QuotaExceeded" or "GeminiUnauthorized" or "GeminiForbidden" or "GeminiModelUnavailable" or "SourceChanged";
                 }
                 catch (AudioStorageException error)
                 {
                     results.Add(new(language.Code, error.Code == "SupabaseQuotaExceeded" ? "PausedQuota" : "Failed", textReady, false,
-                        error.Code, StorageFailureDetails: error.Details));
+                        error.Code, StorageFailureDetails: error.Details, FailureStage: stage));
                     paused = true; // Không sinh thêm audio khi storage đang lỗi.
                 }
                 catch (Exception error) when (error is DbUpdateException or System.Data.Common.DbException or IOException or UnauthorizedAccessException)
                 {
-                    results.Add(new(language.Code, "Failed", textReady, false, "PersistenceUnavailable"));
+                    results.Add(new(language.Code, "Failed", textReady, false, "PersistenceUnavailable", FailureStage: stage));
                     paused = true;
                 }
                 finally { coordinator.Slots.Release(); }

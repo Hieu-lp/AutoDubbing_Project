@@ -8,10 +8,10 @@ export interface WalkingRoute {
   stops: RoutePreview['stops'];
   attribution: string;
 }
-export async function createWalkingRoute(start: Coordinates, stops: Poi[], signal?: AbortSignal): Promise<WalkingRoute> {
-  if (!stops.length) throw new Error('Chọn ít nhất một POI để tạo lộ trình.');
-  const { data } = await apiRequest<RoutePreview>('routes/preview', {
-    body: { startLatitude: start.latitude, startLongitude: start.longitude, poiIds: stops.map(poi => poi.id) },
+export async function createWalkingRoute(start: Coordinates, stops: Poi[], signal?: AbortSignal, savedRouteId?: number): Promise<WalkingRoute> {
+  if (!savedRouteId && !stops.length) throw new Error('Chọn ít nhất một POI để tạo lộ trình.');
+  const { data } = await apiRequest<RoutePreview>(savedRouteId ? `routes/${savedRouteId}/preview` : 'routes/preview', {
+    body: { startLatitude: start.latitude, startLongitude: start.longitude, ...(savedRouteId ? {} : { poiIds: stops.map(poi => poi.id) }) },
     signal, timeoutMs: 30_000,
   });
   if (data.geometry?.type !== 'LineString' || data.geometry.coordinates.length < 2

@@ -22,6 +22,7 @@ public class SupabaseStorageTests
         public bool PublicReadFailsAfterUpload { get; set; }
         public string MissingCode { get; set; } = "NoSuchKey";
         public string? UploadErrorCode { get; set; }
+        public string PublicMime { get; set; } = "audio/wav";
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             Assert.Equal(request.Method == HttpMethod.Post ? "fixture.storage.supabase.co" : ProjectHost, request.RequestUri!.Host);
@@ -35,7 +36,7 @@ public class SupabaseStorageTests
                 if (Objects.TryGetValue(name, out var bytes) && !PublicReadFailsAfterUpload)
                 {
                     var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
-                    response.Content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+                    response.Content.Headers.ContentType = new MediaTypeHeaderValue(PublicMime);
                     return response;
                 }
                 return new(HttpStatusCode.BadRequest) { Content = new StringContent(JsonSerializer.Serialize(new { code = MissingCode })) };
@@ -135,11 +136,14 @@ public class SupabaseStorageTests
         Assert.Same(existing, stub.Objects[path]);
     }
 
-    [Fact]
-    public async Task Lost_upload_response_reuses_existing_object_on_retry()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Lost_upload_response_reuses_existing_object_on_retry(bool rendition)
     {
         using var stub = new Stub(true) { LoseUploadResponse = true };
-        var path = GeneratedAudioPaths.For(1, "vi", "Transcript");
+        var path = rendition ? GeneratedAudioPaths.For(1, "vi", "Transcript", new byte[44])
+            : GeneratedAudioPaths.For(1, "vi", "Transcript");
         var error = await Assert.ThrowsAsync<AudioStorageException>(() => Storage(stub).UploadAsync(path, new byte[44], default));
         Assert.Equal("SupabaseUnavailable", error.Code);
         Assert.Equal("WaitingForUploadResponse", error.Details?.Stage);
@@ -151,6 +155,54 @@ public class SupabaseStorageTests
         await Storage(stub).UploadAsync(path, new byte[44], default);
         Assert.Equal(1, stub.Uploads);
         Assert.Single(stub.Objects);
+    }
+
+    [Fact]
+    public async Task Different_renditions_share_bucket_without_overwriting_legacy_or_each_other()
+    {
+        using var stub = new Stub(true);
+        var legacy = GeneratedAudioPaths.For(2, "vi", "Source");
+        var old = new byte[46];
+        stub.Objects[legacy] = old;
+        foreach (var wav in new[] { new byte[44], new byte[45] })
+        {
+            var path = GeneratedAudioPaths.For(2, "vi", "Source", wav);
+            var url = await Storage(stub).UploadAsync(path, wav, default);
+            Assert.True(GeneratedAudioPaths.Matches(url, 2, "vi", "Source"));
+            Assert.False(GeneratedAudioPaths.Matches(url, 1, "vi", "Source"));
+            Assert.False(GeneratedAudioPaths.Matches(url, 2, "en", "Source"));
+            Assert.False(GeneratedAudioPaths.Matches(url, 2, "vi", "Changed"));
+            await Storage(stub).UploadAsync(path, wav, default);
+        }
+        Assert.Equal(2, stub.Uploads);
+        Assert.Equal(3, stub.Objects.Count);
+        Assert.Same(old, stub.Objects[legacy]);
+    }
+
+    [Fact]
+    public async Task Rendition_path_with_wrong_byte_hash_is_rejected_before_network()
+    {
+        using var stub = new Stub(true);
+        var error = await Assert.ThrowsAsync<AudioStorageException>(() => Storage(stub).UploadAsync(
+            GeneratedAudioPaths.For(2, "vi", "Source", new byte[44]), new byte[45], default));
+        Assert.Equal("InvalidAudioUpload", error.Code);
+        Assert.Equal(0, stub.Uploads);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Mismatch_validation_still_rejects_wrong_bytes_or_mime_on_rendition_path(bool wrongMime)
+    {
+        using var stub = new Stub(true);
+        var wav = new byte[44];
+        var path = GeneratedAudioPaths.For(2, "zh-hans", "Transcript", wav);
+        stub.Objects[path] = wrongMime ? wav : new byte[45];
+        if (wrongMime) stub.PublicMime = "text/html";
+        var error = await Assert.ThrowsAsync<AudioStorageException>(() => Storage(stub).UploadAsync(path, wav, default));
+        Assert.Equal("SupabaseObjectMismatch", error.Code);
+        Assert.Equal("CheckingExistingObject", error.Details?.Stage);
+        Assert.Equal(0, stub.Uploads);
     }
 
     [Fact]

@@ -59,7 +59,7 @@ public sealed class ContentPreparationWorker(IContentPreparationQueue queue, ISe
                     else if (code == "SourceChanged") status = "Superseded";
                     else if (code.StartsWith("Supabase", StringComparison.Ordinal) || code == "PersistenceUnavailable")
                         queue.Block(code, retryAt);
-                    queue.Complete(job.Id, status, result.TextReady, code, retryAt);
+                    queue.Complete(job.Id, status, result.TextReady, code, retryAt, result.FailureStage);
                 }
                 catch (OperationCanceledException)
                 {
@@ -79,6 +79,24 @@ public sealed class ContentPreparationWorker(IContentPreparationQueue queue, ISe
                     var until = clock.GetUtcNow().AddMinutes(options.Value.FailureCooldownMinutes);
                     queue.Complete(job.Id, "Failed", job.TextReady, "PreparationUnavailable", until);
                     queue.Block("PreparationUnavailable", until);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (queue.Find(job.Id) is { FinishedAt: not null } completed)
+                        {
+                            await using var logScope = scopes.CreateAsyncScope();
+                            var writer = logScope.ServiceProvider.GetService<AutoDubbing.Service.Monitoring.SystemEventWriter>();
+                            if (writer is not null)
+                            {
+                                using var logTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                                await writer.WriteJobAsync(completed, logTimeout.Token);
+                            }
+                        }
+                    }
+                    catch (Exception error)
+                    { logger.LogWarning("Could not persist job log; exception type {ExceptionType}", error.GetType().Name); }
                 }
             }
         }

@@ -4,7 +4,8 @@ WORKDIR /app
 COPY fe-user-web/package.json fe-user-web/package-lock.json ./
 RUN npm ci
 COPY fe-user-web/ ./
-ENV VITE_API_BASE_URL=/api \
+ENV VITE_USE_MOCK_DATA=false \
+    VITE_API_BASE_URL=/api \
     VITE_GPS_MAX_AGE_MS=10000 \
     VITE_GPS_MAX_ACCURACY_METERS=50
 RUN npm run build

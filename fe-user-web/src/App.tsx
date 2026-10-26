@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTourGuide } from './hooks/useTourGuide';
 import { visitorApi, contentKey } from './services/api';
-import type { PoiContent } from './types';
+import type { PoiContent, SavedRoute } from './types';
 import { useTranslation } from 'react-i18next';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -13,6 +13,8 @@ import { isReady, preparationKey } from './services/api';
 import { preparationMessage } from './services/preparationClient';
 import { distanceMeters } from './tour/proximity';
 import { createWalkingRoute, type WalkingRoute } from './services/routeService';
+import { recordRouteSelection, startHeartbeat } from './services/usageService';
+import SuggestedRoutes from './SuggestedRoutes';
 
 const initialCenter: Coordinates = { latitude: 10.7769, longitude: 106.7009 };
 const locationIcon = L.divIcon({ className: 'location-marker', html: '<span></span>', iconSize: [24, 24], iconAnchor: [12, 12] });
@@ -67,9 +69,11 @@ export default function App() {
   const [mapPicker, setMapPicker] = useState(false);
   const [routeMode, setRouteMode] = useState(false);
   const [routePoiIds, setRoutePoiIds] = useState<number[]>([]);
+  const [savedRoute, setSavedRoute] = useState<SavedRoute | null>(null);
   const [walkingRoute, setWalkingRoute] = useState<WalkingRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState('');
+  const [dataNotice, setDataNotice] = useState('');
   const [playIntent, setPlayIntent] = useState<string | null>(null);
   const selectedPoiRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -84,7 +88,8 @@ export default function App() {
   const narrationLanguages = visitor.languages.data ?? [];
   const selectedPoi = visitor.detail.data ?? pois.find(poi => poi.id === selectedPoiId) ?? null;
   const selectedContent = visitor.content.data;
-  const audio = useAudioPlayer(selection, selectedContent);
+  const audio = useAudioPlayer(selection, selectedContent, true);
+  useEffect(() => startHeartbeat(), []);
   const { isPlaying, currentTime, duration, error: audioError } = audio;
   const audioRef = audio.ref;
   const selectedPreparation = selection ? visitor.preparations[selection] : undefined;
@@ -114,6 +119,13 @@ export default function App() {
   });
   const playAudio = audio.play;
   const notePlayed = guide.notePlayed;
+  const invalidateGuide = guide.invalidate;
+  const stopAudio = audio.stop;
+  useEffect(() => {
+    if (selectedPoiId === null || !visitor.pois.isSuccess || !visitor.pois.data || visitor.pois.data.some(poi => poi.id === selectedPoiId)) return;
+    invalidateGuide(); choiceVersion.current++; setPlayIntent(null); stopAudio(); setSelectedPoiId(null);
+    setDataNotice('POI vừa được ẩn/xóa hoặc không còn công khai. Danh sách đã được làm mới.');
+  }, [selectedPoiId, visitor.pois.isSuccess, visitor.pois.data, invalidateGuide, stopAudio]);
   useEffect(() => {
     const change = () => setPageVisible(!document.hidden);
     document.addEventListener('visibilitychange',change);
@@ -148,27 +160,40 @@ export default function App() {
     choiceVersion.current++; setPlayIntent(null); guide.chooseMapPoint(point);
     setMapPicker(false); invalidateRoute();
   }
-  function selectPoi(id: number) { guide.invalidate(); choiceVersion.current++; setPlayIntent(null); audio.stop(); setSelectedPoiId(id); }
+  function selectPoi(id: number) { guide.invalidate(); choiceVersion.current++; setPlayIntent(null); audio.stop(); setDataNotice(''); setSelectedPoiId(id); }
   function clearSelection() { guide.invalidate(); choiceVersion.current++; setPlayIntent(null); audio.stop(); setSelectedPoiId(null); }
   function toggleRoutePoi(id: number) {
+    setSavedRoute(null);
     invalidateRoute(); setRoutePoiIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current,id]);
   }
-  async function buildRoute() {
+  async function buildRoute(chosen = savedRoute) {
     if (!location) { setRouteError('Hãy chọn vị trí xuất phát trên bản đồ hoặc dùng vị trí GPS.'); return; }
-    if (routePois.length < 2) { setRouteError('Chọn ít nhất 2 POI để tạo lộ trình.'); return; }
+    if (!chosen && routePois.length < 2) { setRouteError('Chọn ít nhất 2 POI để tạo lộ trình.'); return; }
     routeRequest.current.controller?.abort();
     const controller = new AbortController(); const version = ++routeRequest.current.version;
     routeRequest.current.controller = controller; setRouteLoading(true); setRouteError('');
     try {
-      const result = await createWalkingRoute(location, routePois, controller.signal);
-      if (version === routeRequest.current.version && !controller.signal.aborted) setWalkingRoute(result);
+      const result = await createWalkingRoute(location, routePois, controller.signal, chosen?.id);
+      if (version === routeRequest.current.version && !controller.signal.aborted) {
+        setWalkingRoute(result);
+        if (chosen) void recordRouteSelection(chosen.id);
+      }
     } catch (failure) {
       if (version === routeRequest.current.version && !controller.signal.aborted) {
         setWalkingRoute(null); setRouteError(failure instanceof Error ? failure.message : 'Không lấy được tuyến đi bộ.');
       }
     } finally { if (version === routeRequest.current.version) setRouteLoading(false); }
   }
-  function toggleRouteMode() { clearSelection(); invalidateRoute(); setRouteMode(current => !current); }
+  function toggleRouteMode() { clearSelection(); invalidateRoute(); setSavedRoute(null); setRouteMode(current => !current); }
+  function pickSuggested(route: SavedRoute) {
+    clearSelection(); invalidateRoute(); setSavedRoute(route); setRoutePoiIds(route.poiIds); setRouteMode(true);
+    void queryClient.invalidateQueries({ queryKey: ['pois'] }); void buildRoute(route);
+  }
+  function updateSuggested(route: SavedRoute | null) {
+    invalidateRoute(); setSavedRoute(route); setRoutePoiIds(route?.poiIds ?? []);
+    setRouteError(route ? 'Lộ trình gợi ý đã được cập nhật. Thứ tự mới đang hiển thị; bấm Tạo lộ trình để tính lại đường đi.'
+      : 'Lộ trình đã bị ẩn/xóa hoặc có POI không còn công khai. Hãy chọn một gợi ý khác.');
+  }
   async function toggleAudio() {
     if (audio.isPlaying) { audio.pause(); return; }
     if (isReady(selectedContent, narrationLanguage)) {
@@ -240,6 +265,8 @@ export default function App() {
             {visitor.pois.isPending && <p className="integration-note" role="status">Đang tải địa điểm…</p>}
             {visitor.pois.isError && <div className="route-error" role="alert">Không tải được danh sách địa điểm. <button onClick={() => void visitor.pois.refetch()}>Thử lại</button></div>}
             {(visitor.languages.isError || visitor.settings.isError) && <p className="integration-note" role="alert">Chưa tải được ngôn ngữ/cấu hình thuyết minh. <button onClick={() => { void visitor.languages.refetch(); void visitor.settings.refetch(); }}>Thử lại</button></p>}
+            <SuggestedRoutes selected={savedRoute} onSelect={pickSuggested} onChanged={updateSuggested} />
+            {dataNotice && <p className="integration-note" role="status">{dataNotice}</p>}
             {routeMode ? (
               <div className="route-builder">
                 <div className="route-origin"><span className="route-origin-dot" /><span>{language === 'vi' ? `Bắt đầu: ${locationSource === 'gps' ? 'vị trí GPS của bạn' : locationSource === 'map' ? 'vị trí đã chọn trên bản đồ' : 'chưa chọn vị trí xuất phát'}` : `Start: ${locationSource === 'gps' ? 'your GPS location' : locationSource === 'map' ? 'selected map point' : 'choose a starting location'}`}</span></div>
@@ -250,7 +277,7 @@ export default function App() {
                 <div className="route-poi-picker"><div className="route-picker-title">{language === 'vi' ? 'CHỌN ĐIỂM THAM QUAN' : 'CHOOSE PLACES'}</div>{pois.map((poi) => { const included = routePoiIds.includes(poi.id); return <button type="button" key={poi.id} className={`route-choice ${included ? 'route-choice-selected' : ''}`} onClick={() => toggleRoutePoi(poi.id)} aria-pressed={included}><span className="route-check">{included ? '✓' : '+'}</span><span>{poi.name}</span></button>; })}</div>
                 {walkingRoute && <div className="route-result" role="status"><b>{language === 'vi' ? 'Đã tạo tuyến đi bộ' : 'Walking route ready'}</b><span>{formatDistance(walkingRoute.distanceMeters, language === 'en')} · {Math.max(1, Math.round(walkingRoute.durationSeconds / 60))} {language === 'vi' ? 'phút đi bộ' : 'min walk'}</span><small>{walkingRoute.attribution}</small></div>}
                 {routeError && <div className="route-error" role="alert">{routeError}</div>}
-                <button className="route-submit" onClick={() => void buildRoute()} disabled={routeLoading || routePoiIds.length < 2}><Icon name="route" size={17} />{routeLoading ? (language === 'vi' ? 'Đang tính đường…' : 'Finding route…') : walkingRoute ? (language === 'vi' ? 'Cập nhật lộ trình' : 'Update route') : (language === 'vi' ? `Tạo lộ trình (${routePoiIds.length})` : `Create route (${routePoiIds.length})`)}</button>
+                <button className="route-submit" onClick={() => void buildRoute()} disabled={routeLoading || (!savedRoute && routePoiIds.length < 2)}><Icon name="route" size={17} />{routeLoading ? (language === 'vi' ? 'Đang tính đường…' : 'Finding route…') : walkingRoute ? (language === 'vi' ? 'Cập nhật lộ trình' : 'Update route') : (language === 'vi' ? `Tạo lộ trình (${routePoiIds.length})` : `Create route (${routePoiIds.length})`)}</button>
                 {!walkingRoute && !routeError && routePoiIds.length < 2 && <small className="route-validation">{language === 'vi' ? 'Chọn thêm ít nhất một điểm nữa.' : 'Choose at least one more place.'}</small>}
               </div>
               ) : selectedPoi ? (

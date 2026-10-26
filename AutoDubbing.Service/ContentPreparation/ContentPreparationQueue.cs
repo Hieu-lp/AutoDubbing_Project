@@ -13,6 +13,7 @@ public sealed class ContentPreparationQueue(IOptions<ContentPreparationOptions> 
     private readonly Dictionary<Guid, PreparationJob> jobs = new();
     private readonly Dictionary<(int, string, string), Guid> keys = new();
     private (string Code, DateTimeOffset Until)? block;
+    private readonly DateTimeOffset startedAt = clock.GetUtcNow();
 
     public (string Code, DateTimeOffset Until)? CurrentBlock
     {
@@ -72,12 +73,13 @@ public sealed class ContentPreparationQueue(IOptions<ContentPreparationOptions> 
         }
     }
 
-    public void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null)
+    public void Complete(Guid id, string status, bool textReady, string? errorCode = null, DateTimeOffset? retryAt = null,
+        string? failureStage = null)
     {
         lock (gate)
         {
             jobs[id] = jobs[id] with { Status = status, TextReady = textReady, ErrorCode = errorCode,
-                RetryAt = retryAt, FinishedAt = clock.GetUtcNow() };
+                RetryAt = retryAt, FinishedAt = clock.GetUtcNow(), FailureStage = failureStage };
             Prune(clock.GetUtcNow());
         }
     }
@@ -92,10 +94,13 @@ public sealed class ContentPreparationQueue(IOptions<ContentPreparationOptions> 
     {
         lock (gate)
         {
-            var current = jobs.Values;
+            Prune(clock.GetUtcNow());
+            var current = jobs.Values.ToArray();
+            var stopped = CurrentBlock;
             return new(current.Count(job => job.Status == "Queued"),
                 current.Count(job => job.Status == "Processing"),
-                current.Count(job => job.Status == "Failed"));
+                current.Count(PreparationQueueSnapshot.IsFailure), current,
+                stopped?.Code, stopped?.Until, startedAt, options.Value.JobRetentionMinutes, options.Value.RetainedJobs);
         }
     }
 

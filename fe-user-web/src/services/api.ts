@@ -20,7 +20,7 @@ export function retryDelay(value: string | null, now = Date.now()): number {
   return Number.isFinite(date) ? Math.max(0, date - now) : 0;
 }
 export async function apiRequest<T>(path: string, options: {
-  signal?: AbortSignal; body?: unknown; allowPreparationError?: boolean; timeoutMs?: number;
+  signal?: AbortSignal; body?: unknown; allowPreparationError?: boolean; timeoutMs?: number; token?: string;
 } = {}): Promise<ApiResult<T>> {
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -30,8 +30,8 @@ export async function apiRequest<T>(path: string, options: {
   try {
     const response = await fetch(`${apiBase}/${path.replace(/^\//, '')}`, {
       method: options.body === undefined ? 'GET' : 'POST',
-      headers: options.body === undefined ? { Accept: 'application/json' }
-        : { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: { Accept: 'application/json', ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}) },
       credentials: 'omit', signal: controller.signal,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
@@ -68,3 +68,9 @@ export const visitorApi = {
     { body: { latitude: point.latitude, longitude: point.longitude }, signal, allowPreparationError: true }),
   status: (id: string, signal?: AbortSignal) => apiRequest<PreparationItem>(`content-preparations/${encodeURIComponent(id)}`, { signal }),
 };
+export const adminPreparationApi = (token: string) => ({ ...visitorApi,
+  content: (id: number, language: string, signal?: AbortSignal) =>
+    apiRequest<PoiContent>(`admin/pois/${id}/content?language=${encodeURIComponent(language)}`, { signal, token }).then(result => result.data),
+  prepare: (id: number, language: string, signal?: AbortSignal) => apiRequest<PreparationItem>(`admin/pois/${id}/prepare-content`,
+    { body: { language }, signal, token, allowPreparationError: true }),
+});

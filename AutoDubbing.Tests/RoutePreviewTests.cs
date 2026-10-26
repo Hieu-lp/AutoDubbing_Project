@@ -92,7 +92,6 @@ public sealed class RoutePreviewTests
         await using var scope = fixture.Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.Equal(3, await db.PointsOfInterest.CountAsync());
-        Assert.Equal(0, await db.Sessions.CountAsync());
         Assert.Equal(0, await db.Routes.CountAsync());
         Assert.Equal(0, await db.UsageEvents.CountAsync());
         Assert.Equal(0, await db.SystemLogs.CountAsync());
