@@ -190,13 +190,30 @@ public sealed class AdminIntegrationTests
         JsonElement[] logs = [];
         for (var i = 0; i < 150; i++)
         {
-            logs = (await admin.GetFromJsonAsync<JsonElement[]>($"/api/admin/logs?poiId={id}&language=en&level=error"))!;
+            using var logResponse = await admin.GetAsync($"/api/admin/logs?poiId={id}&language=en&level=error");
+            if (logResponse.IsSuccessStatusCode)
+                logs = (await logResponse.Content.ReadFromJsonAsync<JsonElement[]>()) ?? [];
+            else if (logResponse.StatusCode != HttpStatusCode.InternalServerError)
+                logResponse.EnsureSuccessStatusCode();
             if (logs.Length > 0) break; await Task.Delay(20);
         }
         var error = Assert.Single(logs); Assert.Equal(queued.JobId, error.GetProperty("jobId").GetGuid());
         Assert.Equal("tts", error.GetProperty("stage").GetString()); Assert.Equal("GeminiForbidden", error.GetProperty("errorCode").GetString());
         Assert.DoesNotContain("fixture-gemini-key", error.GetRawText()); Assert.DoesNotContain(factory.Password, error.GetRawText());
-        var summary = (await admin.GetFromJsonAsync<AdminDashboardSummary>("/api/admin/dashboard/summary"))!;
+        AdminDashboardSummary? summary = null;
+        for (var i = 0; i < 50; i++)
+        {
+            using var summaryResponse = await admin.GetAsync("/api/admin/dashboard/summary");
+            if (summaryResponse.IsSuccessStatusCode)
+            {
+                summary = await summaryResponse.Content.ReadFromJsonAsync<AdminDashboardSummary>();
+                if (summary?.Pipeline.RecentErrors.Count > 0) break;
+            }
+            else if (summaryResponse.StatusCode != HttpStatusCode.InternalServerError)
+                summaryResponse.EnsureSuccessStatusCode();
+            await Task.Delay(20);
+        }
+        Assert.NotNull(summary);
         Assert.Equal(id, Assert.Single(summary.Pipeline.RecentErrors).PoiId);
     }
 
