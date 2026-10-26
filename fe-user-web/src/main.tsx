@@ -5,8 +5,10 @@ import RootApp from './RootApp';
 import 'leaflet/dist/leaflet.css';
 import './i18n';
 import './styles.css';
+import './integration.css';
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000, retry: 1 } } });
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000, retry: false, refetchOnWindowFocus: false } } });
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}><RootApp /></QueryClientProvider>

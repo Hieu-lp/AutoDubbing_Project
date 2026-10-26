@@ -9,8 +9,8 @@ const healthLabels: Record<DashboardHealth, string> = {
   unknown: 'Chưa rõ',
 };
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('vi-VN').format(value);
+function formatNumber(value: number | null) {
+  return value === null ? '—' : new Intl.NumberFormat('vi-VN').format(value);
 }
 
 function formatTime(value: string) {
@@ -22,8 +22,8 @@ function HealthCard({ name, value }: { name: string; value: DashboardHealth }) {
   return <article className="admin-health-card"><span className={`admin-health-dot health-${value}`} /><div><strong>{name}</strong><span>{healthLabels[value]}</span></div></article>;
 }
 
-function MetricCard({ label, value, suffix = '' }: { label: string; value: number; suffix?: string }) {
-  return <article className="admin-monitoring-stat"><span>{label}</span><strong>{formatNumber(value)}{suffix}</strong></article>;
+function MetricCard({ label, value, suffix = '' }: { label: string; value: number | null; suffix?: string }) {
+  return <article className="admin-monitoring-stat"><span>{label}</span><strong>{formatNumber(value)}{value === null ? '' : suffix}</strong></article>;
 }
 
 function Breakdown({ title, items }: { title: string; items: { label: string; count: number }[] }) {
@@ -37,8 +37,9 @@ function Breakdown({ title, items }: { title: string; items: { label: string; co
 }
 
 function DashboardContent({ data }: { data: AdminDashboardResponse }) {
-  const playTotal = data.usage.autoPlayCount + data.usage.manualPlayCount;
-  const autoPlayPercent = playTotal ? Math.round((data.usage.autoPlayCount / playTotal) * 100) : 0;
+  const playTotal = (data.usage.autoPlayCount ?? 0) + (data.usage.manualPlayCount ?? 0);
+  const autoPlayPercent = data.usage.autoPlayCount === null || data.usage.manualPlayCount === null
+    ? null : playTotal ? Math.round((data.usage.autoPlayCount / playTotal) * 100) : 0;
   return <>
     <section className="admin-monitoring-section">
       <header className="admin-monitoring-heading"><div><h2>Tình trạng hệ thống</h2><p>Trạng thái các thành phần chính và công việc xử lý.</p></div><span className="admin-monitoring-unavailable">Cập nhật {formatTime(data.generatedAtUtc)}</span></header>
@@ -66,7 +67,7 @@ function DashboardContent({ data }: { data: AdminDashboardResponse }) {
         <MetricCard label="Lượt nghe tự động" value={data.usage.autoPlayCount} />
         <MetricCard label="Lượt nghe do chạm POI" value={data.usage.manualPlayCount} />
         <MetricCard label="Tỷ lệ nghe tự động" value={autoPlayPercent} suffix="%" />
-        <MetricCard label="Lộ trình phổ biến nhất" value={data.usage.topRoute?.selections ?? 0} />
+        <MetricCard label="Lộ trình phổ biến nhất" value={data.usage.topRoute?.selections ?? null} />
       </div>
       {data.usage.topRoute && <p className="admin-dashboard-top-route">Được chọn nhiều nhất: <strong>{data.usage.topRoute.name}</strong></p>}
       <div className="admin-monitoring-panels">

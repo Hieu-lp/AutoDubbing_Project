@@ -1,4 +1,5 @@
 using AutoDubbing.Service.Languages;
+using AutoDubbing.Data.Storage;
 
 namespace AutoDubbing.Service.ContentGeneration;
 
@@ -13,9 +14,13 @@ public sealed class GeminiOptions
         && ApiKey.All(c => c is > ' ' and <= '~') && TimeoutSeconds is >= 1 and <= 120
         && MaxRetries is >= 0 and <= 3;
 }
-public sealed class GenerationException(string code) : Exception(code)
+// Only fixed model IDs, status codes and allowlisted reasons; never raw provider messages.
+public sealed record GenerationFailureDetails(string Model, int? HttpStatus = null,
+    string? FinishReason = null, string? QuotaKind = null, double? RetryAfterSeconds = null);
+public sealed class GenerationException(string code, GenerationFailureDetails? details = null) : Exception(code)
 {
     public string Code => Message;
+    public GenerationFailureDetails? Details { get; } = details;
 }
 public sealed record GeneratedAudio(byte[] Wav, double DurationSeconds);
 public interface IContentProvider
@@ -30,12 +35,13 @@ public sealed class GenerationDelay : IGenerationDelay
     public Task WaitAsync(TimeSpan delay, CancellationToken token) => Task.Delay(delay, token);
 }
 public sealed record LanguageGenerationResult(string Language, string Status, bool TextReady,
-    bool AudioReady, string? ErrorCode = null, double? AudioDurationSeconds = null);
+    bool AudioReady, string? ErrorCode = null, double? AudioDurationSeconds = null,
+    GenerationFailureDetails? FailureDetails = null, AudioStorageFailureDetails? StorageFailureDetails = null);
 public sealed record GenerationBatchResult(int PoiId, IReadOnlyList<LanguageGenerationResult> Results,
     IReadOnlyList<string> RemainingLanguages);
 public interface IContentGenerationService
 {
     bool IsConfigured { get; }
     Task<GenerationBatchResult?> GenerateAsync(int poiId, IReadOnlyList<string> languages,
-        int batchSize, CancellationToken token);
+        int batchSize, CancellationToken token, string? expectedSourceVersion = null);
 }

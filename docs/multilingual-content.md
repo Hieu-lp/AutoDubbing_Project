@@ -1,5 +1,7 @@
 # Nội dung và audio đa ngôn ngữ
 
+**Yêu cầu hiện hành 24/10/2026:** dừng sinh sẵn 8 POI × 15 ngôn ngữ. Khách ẩn danh được POST chuẩn bị audio nguồn trong 500 m hoặc yêu cầu một ngôn ngữ của một POI; GET chỉ đọc. Xem hợp đồng đầy đủ, hàng đợi, quota và quy tắc phát 50 m/3 giây tại [content-on-demand.md](content-on-demand.md). Báo cáo live bên dưới là các mốc lịch sử, không phải kiểm kê hôm nay. Cấu hình hiện tạm dừng nhận sinh mới vì quota, Ready vẫn phục vụ.
+
 ## Phạm vi và quyết định đã chốt
 
 Backend hỗ trợ 15 ngôn ngữ cho cả văn bản và audio, bao gồm tiếng Việt gốc; vi/en không giới hạn sản phẩm. Danh mục duy nhất ở AutoDubbing.Service/Languages/LanguageCatalog.cs; Controller, Service và test dùng chung danh mục. Model cố định gemini-3.1-flash-lite cho dịch và gemini-3.1-flash-tts-preview cho TTS, không tự đổi model hay bật billing. Tiếng Việt dùng nguyên mo_ta_goc, không tạo BAN_DICH tiếng Việt.
@@ -86,19 +88,19 @@ Controller chỉ xử lý HTTP/validation; Service điều phối dịch/TTS và
 3. Sinh TTS đúng transcript; đọc MIME thật, đóng gói PCM signed 16-bit little-endian mono thành WAV với sample rate thật. Từ chối audio rỗng, sai định dạng hoặc vượt 6 MiB.
 4. Cache WAV thành công ở artifacts/audio-cache trong ContentRoot của API trước khi upload. Chạy lại sau lỗi upload/SQL sẽ dùng WAV cache, không gọi TTS lại.
 5. Xác minh bucket public, upload audio/wav, sau đó lưu AUDIO Ready với URL HTTPS đầy đủ. Cột thoi_luong lưu số giây làm tròn lên từ frame WAV; response lượt tạo giữ thời lượng thực tế dạng số thập phân.
-6. Sau khi SQL Ready thành công, xóa file cache tương ứng. Khi restart, bản dịch/audio Ready trong SQL và cache trên đĩa vẫn dùng lại được. Cần giữ volume cache nếu chạy container; cache chưa upload sẽ mất nếu filesystem container bị xóa.
+6. Giữ WAV cache cả sau khi SQL Ready thành công; không tự xóa cache/file đã có. Khi restart, bản dịch/audio Ready trong SQL và cache trên đĩa vẫn dùng lại được. Cần giữ volume cache nếu chạy container; cache sẽ mất nếu filesystem container bị xóa. Theo dõi dung lượng đĩa vì chưa tự dọn cache.
 
 Object path generated/poi-{id}/{language}/{SHA256-UTF8-text}.wav ghép audio với đúng văn bản. Audio do pipeline tạo có hash không khớp văn bản hiện tại sẽ không được public content phục vụ. URL audio Ready cũ do người dùng nhập thủ công vẫn được giữ theo quy tắc hiện có; backend không thể chứng minh transcript của file ngoài pipeline.
 
-Mỗi bước lưu SQL dùng transaction ngắn và kiểm tra nguồn vẫn Published, tiếng Việt và nguyên văn như lúc đọc. Trước khi lưu audio còn đối chiếu bản dịch Ready hiện hành. Không giữ transaction SQL trong lúc gọi dịch vụ ngoài. SQL và Supabase không có transaction chung: nếu upload thành công nhưng lưu SQL lỗi, file có thể đã tồn tại ở storage, WAV cache còn để thử lại. Đường dẫn có hash và upsert cho phép hoàn tất lại an toàn.
+Mỗi bước lưu SQL dùng transaction ngắn và kiểm tra nguồn vẫn Published, tiếng Việt và nguyên văn như lúc đọc. Trước khi lưu audio còn đối chiếu bản dịch Ready hiện hành. Không giữ transaction SQL trong lúc gọi dịch vụ ngoài. SQL và Supabase không có transaction chung: nếu upload thành công nhưng lưu SQL lỗi, file có thể đã tồn tại ở storage, WAV cache còn để thử lại. Đường dẫn có hash, kiểm tra object tồn tại/byte khớp và không overwrite cho phép hoàn tất lại an toàn. Upload dùng hostname Storage trực tiếp đã kiểm chứng, không tăng timeout để thay cho sửa kết nối.
 
 Các bản ghi Ready hiện có được coi là đã duyệt, không tự dịch lại. Nếu sửa mô tả gốc bằng SQL, cần quản lý/thu hồi các bản dịch Ready đã lỗi thời; schema hiện không có source revision để tự xác định độ mới của bản dịch cũ. Không tự thêm cột để giải quyết việc này.
 
-Giới hạn toàn bộ API instance: hai tác vụ sinh nội dung đồng thời, và khóa theo POI để tránh hai request tạo trùng. Trong một lượt, xử lý các ngôn ngữ tuần tự; có thể có hai POI đang chạy từ hai request. Đây là mô hình một instance demo; chưa có khóa phân tán/unique constraint cho nhiều server.
+Giới hạn hiện hành toàn API instance: một tác vụ pipeline đồng thời, kể cả Admin, và khóa theo POI để tránh tạo trùng. Luồng khách có thêm queue giới hạn 32, khóa theo POI/ngôn ngữ/hash nguồn, ưu tiên yêu cầu chủ động. Đây là mô hình một instance; chưa có khóa phân tán/unique constraint cho nhiều server. Thông số và giới hạn restart tại [content-on-demand.md](content-on-demand.md).
 
-Gemini 429: tôn trọng Retry-After hoặc RetryInfo; nếu thiếu thì backoff có jitter và có chờ. Tối đa 2 retry mặc định (cấu hình 0–3). Quota ngày/giới hạn 0 dừng ngay; chờ yêu cầu vượt 30 giây cũng trả PausedQuota thay vì giữ HTTP lâu. Sau lỗi quota có cooldown chung theo model trong instance, tối thiểu một phút; quota ngày/0 tối thiểu 15 phút và không sớm hơn thời gian chờ provider yêu cầu. Đây không phải dự đoán giờ quota thực sự hồi phục.
+Gemini 429: tôn trọng Retry-After hoặc RetryInfo; nếu thiếu thì backoff có jitter và có chờ. Tối đa 2 retry mặc định (cấu hình 0–3). Quota ngày/giới hạn 0 dừng ngay và báo riêng DailyLimit/ZeroLimit; không gộp DailyOrZeroLimit như báo cáo lịch sử. RateLimit có cooldown ít nhất một phút; queue DailyLimit ít nhất 30 phút; ZeroLimit cần người vận hành kiểm tra quyền/quota rồi restart sau khi khắc phục, không tự retry. Đây không phải dự đoán giờ quota thực sự hồi phục. Xem hợp đồng mới về requiresOperatorAction và retryAt.
 
-Lỗi 401/403/404 không đổi model hay retry. Lỗi 5xx Gemini retry hữu hạn. Timeout mỗi lần gọi mặc định 55 giây, không tự retry timeout. Supabase timeout 30 giây; lỗi upload giữ WAV, dừng phần còn lại của lượt; quota upload trả PausedQuota để người gọi tiếp tục sau, không lặp upload liên tục. Dừng/cancel HTTP vẫn giữ các checkpoint đã ghi xong trước đó. Không có background worker tự chạy tiếp cả danh mục.
+Lỗi 401/403/404 không đổi model hay retry. Lỗi 5xx Gemini retry hữu hạn. Timeout mỗi lần gọi mặc định 55 giây, không tự retry timeout. Supabase timeout 30 giây; lỗi upload giữ WAV và không lặp liên tục. Worker chỉ xử lý job đã nhận từ POST; không tự chạy tiếp cả danh mục. Hủy POST sau khi nhận 202 không hủy job dùng chung. Cancel Admin HTTP hoặc dừng worker giữ checkpoint đã ghi xong. Các endpoint Admin đồng bộ và batchSize 1–3 vẫn dành cho thao tác vận hành chủ động; luồng khách mới luôn một ngôn ngữ/job.
 
 Không ghi key trong URL, response, log hoặc exception. HTTP client Gemini/Supabase tắt logger mặc định và không follow redirect. Chỉ trả mã lỗi an toàn, không trả body lỗi provider. Gemini và Supabase credentials chỉ đọc từ cấu hình backend.
 

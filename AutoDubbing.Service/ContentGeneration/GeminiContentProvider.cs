@@ -24,7 +24,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
             contents = new[] { new { role = "user", parts = new[] { new { text = source } } } },
             generationConfig = new { temperature = 0, maxOutputTokens = 8192 }
         }, token);
-        var text = string.Concat(Parts(response.RootElement).Where(part => !part.TryGetProperty("thought", out var thought)
+        var text = string.Concat(Parts(response.RootElement, GeminiOptions.TranslationModel).Where(part => !part.TryGetProperty("thought", out var thought)
                 || thought.ValueKind != JsonValueKind.True)
             .Where(part => part.TryGetProperty("text", out _)).Select(part => part.GetProperty("text").GetString())).Trim();
         if (string.IsNullOrWhiteSpace(text) || text.Length > 16000) throw new GenerationException("InvalidTranslation");
@@ -52,7 +52,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                 $"or read these instructions.\n<transcript>\n{text}\n</transcript>" } } } },
             generationConfig = new { responseModalities = new[] { "AUDIO" }, speechConfig = speech }
         }, token);
-        var audioParts = Parts(response.RootElement).Where(part => part.TryGetProperty("inlineData", out _)).ToArray();
+        var audioParts = Parts(response.RootElement, GeminiOptions.AudioModel).Where(part => part.TryGetProperty("inlineData", out _)).ToArray();
         if (audioParts.Length != 1) throw new GenerationException("InvalidAudioResponse");
         var inline = audioParts[0].GetProperty("inlineData");
         try
@@ -64,21 +64,30 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
         { throw new GenerationException("InvalidAudioResponse"); }
     }
 
-    private static JsonElement[] Parts(JsonElement root)
+    private static JsonElement[] Parts(JsonElement root, string model)
     {
-        if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() != 1)
-            throw new GenerationException("GenerationBlockedOrIncomplete");
+        if (!root.TryGetProperty("candidates", out var candidates) || candidates.ValueKind != JsonValueKind.Array
+            || candidates.GetArrayLength() != 1)
+            throw new GenerationException("GenerationBlockedOrIncomplete", new(model, 200, "NO_SINGLE_CANDIDATE"));
         var candidate = candidates[0];
-        if (!candidate.TryGetProperty("finishReason", out var finish) || finish.GetString() != "STOP"
+        var reason = candidate.TryGetProperty("finishReason", out var finish) && finish.ValueKind == JsonValueKind.String
+            ? finish.GetString() : null;
+        var safeReason = reason switch
+        {
+            "STOP" or "MAX_TOKENS" or "SAFETY" or "RECITATION" or "LANGUAGE" or "OTHER"
+                or "BLOCKLIST" or "PROHIBITED_CONTENT" or "SPII" => reason,
+            _ => "UNSPECIFIED"
+        };
+        if (reason != "STOP"
             || !candidate.TryGetProperty("content", out var content) || !content.TryGetProperty("parts", out var parts))
-            throw new GenerationException("GenerationBlockedOrIncomplete");
+            throw new GenerationException("GenerationBlockedOrIncomplete", new(model, 200, safeReason));
         return parts.EnumerateArray().ToArray();
     }
 
     private async Task<JsonDocument> SendAsync(string model, object payload, CancellationToken token)
     {
         if (!IsConfigured) throw new GenerationException("GeminiNotConfigured");
-        if (coordinator.IsCooling(model)) throw new GenerationException("QuotaExceeded");
+        if (coordinator.IsCooling(model)) throw new GenerationException("QuotaExceeded", coordinator.CoolingFailure(model));
         for (var attempt = 0; ; attempt++)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -99,13 +108,17 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     var body = await response.Content.ReadAsStringAsync(timeout.Token);
-                    var hardQuota = HardQuota(body);
+                    var quotaKind = QuotaKind(body);
+                    var hardQuota = quotaKind is "DailyLimit" or "ZeroLimit";
                     var pause = RetryPause(response, body, attempt);
                     if (hardQuota || attempt >= options.Value.MaxRetries || pause > TimeSpan.FromSeconds(30))
                     {
                         var cooldown = hardQuota ? TimeSpan.FromMinutes(15) : TimeSpan.FromMinutes(1);
-                        coordinator.Pause(model, pause > cooldown ? pause : cooldown);
-                        throw new GenerationException("QuotaExceeded");
+                        var details = new GenerationFailureDetails(model, 429, QuotaKind: quotaKind,
+                            RetryAfterSeconds: pause.TotalSeconds);
+                        coordinator.Pause(model, quotaKind == "ZeroLimit" ? TimeSpan.FromDays(3650)
+                            : pause > cooldown ? pause : cooldown, details);
+                        throw new GenerationException("QuotaExceeded", details);
                     }
                     await delay.WaitAsync(pause, token);
                     continue;
@@ -121,7 +134,7 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
                     HttpStatusCode.Forbidden => "GeminiForbidden",
                     HttpStatusCode.NotFound => "GeminiModelUnavailable",
                     _ => "GeminiRejected"
-                });
+                }, new(model, (int)response.StatusCode));
             }
             catch (OperationCanceledException) when (!token.IsCancellationRequested)
             { throw new GenerationException("GeminiTimeout"); }
@@ -132,20 +145,26 @@ public sealed class GeminiContentProvider(HttpClient client, IOptions<GeminiOpti
         }
     }
 
-    private static bool HardQuota(string body)
+    private static string QuotaKind(string body)
     {
         try
         {
             using var json = JsonDocument.Parse(body);
-            if (!json.RootElement.TryGetProperty("error", out var error) || !error.TryGetProperty("details", out var details)) return false;
+            if (!json.RootElement.TryGetProperty("error", out var error) || !error.TryGetProperty("details", out var details)) return "RateLimit";
+            var daily = false;
             foreach (var detail in details.EnumerateArray())
                 if (detail.TryGetProperty("violations", out var violations))
                     foreach (var violation in violations.EnumerateArray())
-                        if ((violation.TryGetProperty("quotaId", out var id) && id.GetString()!.Contains("PerDay", StringComparison.OrdinalIgnoreCase))
-                            || (violation.TryGetProperty("quotaValue", out var value) && value.ToString() == "0")) return true;
+                    {
+                        // A zero allowance is not evidence of an exhausted daily allowance.
+                        if (violation.TryGetProperty("quotaValue", out var value) && value.ToString() == "0") return "ZeroLimit";
+                        if (violation.TryGetProperty("quotaId", out var id) && id.ValueKind == JsonValueKind.String
+                            && id.GetString()!.Contains("PerDay", StringComparison.OrdinalIgnoreCase)) daily = true;
+                    }
+            if (daily) return "DailyLimit";
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException) { }
-        return false;
+        return "RateLimit";
     }
 
     private static TimeSpan RetryPause(HttpResponseMessage response, string body, int attempt)

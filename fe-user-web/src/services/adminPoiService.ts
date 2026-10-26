@@ -35,14 +35,14 @@ export interface AdminDashboardResponse {
     queued: number;
     processing: number;
     failed: number;
-    errorRatePercent: number;
-    avgResponseMs: number;
+    errorRatePercent: number | null;
+    avgResponseMs: number | null;
     recentErrors: { component: string; message: string; occurredAtUtc: string }[];
   };
   usage: {
-    activeUsers: number;
-    autoPlayCount: number;
-    manualPlayCount: number;
+    activeUsers: number | null;
+    autoPlayCount: number | null;
+    manualPlayCount: number | null;
     listensByPoi: { poiId: number; name: string; count: number }[];
     listensByLanguage: { language: string; count: number }[];
     topRoute: { id: number; name: string; selections: number } | null;
@@ -52,8 +52,7 @@ export interface AdminDashboardResponse {
 const tokenKey = 'voicemap.admin.access-token';
 const mockPoisKey = 'voicemap.admin.demo.pois';
 const mockToken = 'local-json-admin-demo-token';
-export const useAdminMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true'
-  || (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK_DATA !== 'false');
+export const useAdminMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 async function getMockData() {
   return (await import('../adminMockData.json')).default;
