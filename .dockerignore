@@ -1,0 +1,15 @@
+.git
+.vs
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/artifacts
+**/TestResults
+
+**/.env
+**/.env.*
+!**/.env.example
+
+**/*.pfx
+**/*.bak
