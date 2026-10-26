@@ -1,0 +1,15 @@
+# Dockerfile-specific ignore file; paths are relative to repository root.
+**
+!fe-user-web/
+!fe-user-web/**
+fe-user-web/**/node_modules
+fe-user-web/**/dist
+fe-user-web/**/artifacts
+fe-user-web/**/test-results
+fe-user-web/**/playwright-report
+fe-user-web/**/.git
+fe-user-web/**/.env
+fe-user-web/**/.env.*
+!fe-user-web/.env.example
+fe-user-web/**/*.pfx
+fe-user-web/**/*.bak
