@@ -16,6 +16,8 @@ public sealed class PoiReadRepository(AppDbContext dbContext) : IPoiReadReposito
 
     public Task<PointOfInterest?> FindPublishedAsync(int id, CancellationToken cancellationToken) =>
         PublishedPois.SingleOrDefaultAsync(poi => poi.Id == id, cancellationToken);
+    public Task<PointOfInterest?> FindForAdminAsync(int id, CancellationToken cancellationToken) =>
+        dbContext.PointsOfInterest.AsNoTracking().SingleOrDefaultAsync(poi => poi.Id == id, cancellationToken);
 
     public Task<List<PointOfInterest>> FindPublishedByIdsAsync(int[] ids, CancellationToken cancellationToken) =>
         PublishedPois.Where(poi => ids.Contains(poi.Id)).ToListAsync(cancellationToken);

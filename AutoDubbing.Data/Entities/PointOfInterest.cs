@@ -25,6 +25,11 @@ public class PointOfInterest
     public string OriginalLanguage { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
 
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string SourceVersion => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(
+            new[] { OriginalLanguage, Name, OriginalDescription }))));
+
     public AdminUser User { get; set; } = null!;
     public ICollection<PoiTranslation> Translations { get; set; }
         = new List<PoiTranslation>();

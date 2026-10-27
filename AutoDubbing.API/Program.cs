@@ -1,5 +1,8 @@
 using AutoDubbing.API.Authentication;
 using AutoDubbing.API.Commands;
+using AutoDubbing.API.Background;
+using AutoDubbing.Service.ContentPreparation;
+using AutoDubbing.Service.Monitoring;
 using AutoDubbing.Data.Contexts;
 using AutoDubbing.Data.Entities;
 using AutoDubbing.Data.Repositories;
@@ -36,10 +39,13 @@ if (args is ["create-admin"])
 }
 
 builder.Services.AddScoped<IAdminAuthenticationService, AdminAuthenticationService>();
+builder.Services.AddScoped<AdminAccountService>();
 builder.Services.AddAdminJwtAuthentication();
 builder.Services.AddScoped<IPoiReadRepository, PoiReadRepository>();
 builder.Services.AddScoped<IPoiReadService, PoiReadService>();
+builder.Services.AddScoped<IPoiManagementService, PoiManagementService>();
 builder.Services.AddScoped<IRoutePreviewService, RoutePreviewService>();
+builder.Services.AddScoped<SavedRouteService>();
 builder.Services.Configure<OrsDirectionsOptions>(builder.Configuration.GetSection(OrsDirectionsOptions.SectionName));
 builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(client =>
     client.Timeout = Timeout.InfiniteTimeSpan)
@@ -49,6 +55,20 @@ builder.Services.AddHttpClient<IWalkingRouteProvider, OrsDirectionsProvider>(cli
 builder.Services.AddScoped<IContentGenerationRepository, ContentGenerationRepository>();
 builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
 builder.Services.AddSingleton<GenerationCoordinator>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<VisitorPresence>();
+builder.Services.AddScoped<ActivityService>();
+builder.Services.AddScoped<SystemEventWriter>();
+builder.Services.AddOptions<ContentPreparationOptions>()
+    .Bind(builder.Configuration.GetSection(ContentPreparationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => options.PlaybackRadiusMeters <= options.PreparationRadiusMeters,
+        "PlaybackRadiusMeters must not exceed PreparationRadiusMeters.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IContentPreparationQueue, ContentPreparationQueue>();
+builder.Services.AddSingleton<IPreparationRateGate, PreparationRateGate>();
+builder.Services.AddScoped<IContentPreparationService, ContentPreparationService>();
+builder.Services.AddHostedService<ContentPreparationWorker>();
 builder.Services.AddSingleton<IGenerationDelay, GenerationDelay>();
 builder.Services.AddSingleton<IAudioCache>(new LocalAudioCache(
     Path.Combine(builder.Environment.ContentRootPath, "artifacts", "audio-cache")));
@@ -89,4 +109,3 @@ app.Run();
 
 // Cho phép integration test khởi động đúng ứng dụng với database riêng.
 public partial class Program;
-

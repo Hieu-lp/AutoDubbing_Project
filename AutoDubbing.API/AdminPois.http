@@ -1,0 +1,60 @@
+@baseUrl = https://localhost:7239
+@accessToken = paste-admin-access-token-here
+@poiId = 1
+
+### Sign in and copy accessToken from the response
+POST {{baseUrl}}/api/admin/auth/login
+Content-Type: application/json
+
+{
+  "username": "Admin",
+  "password": "replace-with-your-admin-password"
+}
+
+### List POIs for the admin dashboard
+GET {{baseUrl}}/api/admin/pois
+Authorization: Bearer {{accessToken}}
+
+### Read one POI
+GET {{baseUrl}}/api/admin/pois/{{poiId}}
+Authorization: Bearer {{accessToken}}
+
+### Create a POI
+POST {{baseUrl}}/api/admin/pois
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Địa điểm mẫu",
+  "latitude": 10.7769,
+  "longitude": 106.7009,
+  "proximityRadius": 50,
+  "thumbnailUrl": null,
+  "originalDescription": "Mô tả địa điểm mẫu.",
+  "originalLanguage": "vi",
+  "status": "Hidden"
+}
+
+### Update a POI
+PUT {{baseUrl}}/api/admin/pois/{{poiId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Địa điểm mẫu đã cập nhật",
+  "latitude": 10.7769,
+  "longitude": 106.7009,
+  "proximityRadius": 75,
+  "thumbnailUrl": null,
+  "originalDescription": "Mô tả địa điểm sau khi cập nhật.",
+  "originalLanguage": "vi",
+  "status": "Published"
+}
+
+### Delete a POI without dependent content
+DELETE {{baseUrl}}/api/admin/pois/{{poiId}}
+Authorization: Bearer {{accessToken}}
+
+### A missing POI returns 404
+GET {{baseUrl}}/api/admin/pois/2147483647
+Authorization: Bearer {{accessToken}}

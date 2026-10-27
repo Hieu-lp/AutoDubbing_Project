@@ -1,0 +1,13 @@
+.narration-action{width:100%;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding:10px 12px;border:1px solid #16836f;border-radius:7px;background:#eff9f5;color:#126653;font:inherit;font-size:12px;font-weight:700}
+.narration-action:hover{background:#e2f4ec}.narration-active{background:#16836f;color:#fff}.narration-active:hover{background:#106d5c}.narration-action:disabled{opacity:.5;cursor:not-allowed}
+.integration-note,.fallback-note{margin:10px 0;padding:10px 12px;border:1px solid #dce5f1;border-radius:7px;background:#f5f8fc;color:#536578;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.fallback-note{border-color:#eddbad;background:#fff9eb;color:#73571d}
+.integration-note button,.fallback-note button,.audio-note button,.route-error button{min-height:32px;margin-left:6px;padding:3px 9px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.route-result small{font-size:9px;line-height:1.5;overflow-wrap:anywhere}.route-result{flex-shrink:0}.map-credit{max-width:calc(100% - 20px);overflow-wrap:anywhere}.poi-distance{margin-left:auto;white-space:nowrap}.transcript p{white-space:pre-line}.detail-card{min-width:0}.poi-list{min-height:0}
+@media(max-width:680px){.integration-note,.fallback-note{font-size:12px}.detail-meta{flex-wrap:wrap;gap:8px}.detail-meta label{max-width:100%;flex-wrap:wrap}.detail-meta select{max-width:180px;min-height:34px}.narration-action{min-height:46px}.poi-row{min-height:52px}.route-error{font-size:12px}.audio-note{font-size:11px}.transcript p{font-size:12px}.map-credit{font-size:8px}}
+.suggested-routes{margin:12px 0;color:#344155;font-size:12px;line-height:1.6}
+.suggested-routes>button{width:100%;padding:12px;border:1px solid #c7d6f3;border-radius:8px;background:#f7f9ff;color:#2452b0;cursor:pointer;font:inherit;font-weight:600}
+.suggested-route-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.suggested-route-list .route-choice{min-height:56px}
+.suggested-route-list .route-choice span{display:flex;flex-direction:column;gap:4px;white-space:normal}
+.suggested-route-list small{font-size:11px;color:#536073}
+.suggested-route-list [role=alert]{color:#a12b25}

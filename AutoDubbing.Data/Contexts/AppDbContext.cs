@@ -14,7 +14,6 @@ public class AppDbContext : DbContext
     public DbSet<PointOfInterest> PointsOfInterest => Set<PointOfInterest>();
     public DbSet<PoiTranslation> Translations => Set<PoiTranslation>();
     public DbSet<PoiAudio> Audios => Set<PoiAudio>();
-    public DbSet<TourSession> Sessions => Set<TourSession>();
     public DbSet<TourRoute> Routes => Set<TourRoute>();
     public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
     public DbSet<SystemLog> SystemLogs => Set<SystemLog>();
@@ -72,6 +71,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Text).HasColumnName("van_ban");
             entity.Property(x => x.Status).HasColumnName("trang_thai");
             entity.Property(x => x.UpdatedAt).HasColumnName("thoi_diem_cap_nhat");
+            entity.Property(x => x.SourceVersion).HasColumnName("context_version").HasMaxLength(64);
 
             entity.HasOne(x => x.PointOfInterest)
                 .WithMany(x => x.Translations)
@@ -88,6 +88,8 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Language).HasColumnName("ngon_ngu");
             entity.Property(x => x.FilePath).HasColumnName("duong_dan_file");
             entity.Property(x => x.Duration).HasColumnName("thoi_luong");
+            entity.Property(x => x.SourceVersion).HasColumnName("context_version").HasMaxLength(64);
+            entity.Property(x => x.TextHash).HasColumnName("text_hash").HasMaxLength(64);
             entity.Property(x => x.Status).HasColumnName("trang_thai");
 
             entity.HasOne(x => x.PointOfInterest)
@@ -96,38 +98,18 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.NoAction);
         });
 
-        modelBuilder.Entity<TourSession>(entity =>
-        {
-            entity.ToTable("SESSION");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Id).HasColumnName("id");
-            entity.Property(x => x.UserId).HasColumnName("nguoi_dung_id");
-            entity.Property(x => x.Name).HasColumnName("ten");
-            entity.Property(x => x.Description).HasColumnName("mo_ta");
-            entity.Property(x => x.Status).HasColumnName("trang_thai");
-
-            entity.HasOne(x => x.User)
-                .WithMany(x => x.Sessions)
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.NoAction);
-        });
-
         modelBuilder.Entity<TourRoute>(entity =>
         {
             entity.ToTable("LO_TRINH");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).HasColumnName("id");
-            entity.Property(x => x.SessionId).HasColumnName("session_id");
             entity.Property(x => x.Name).HasColumnName("ten");
             entity.Property(x => x.PoiIdsJson)
                 .HasColumnName("danh_sach_poi")
                 .HasColumnType("nvarchar(max)");
             entity.Property(x => x.Status).HasColumnName("trang_thai");
 
-            entity.HasOne(x => x.Session)
-                .WithMany(x => x.Routes)
-                .HasForeignKey(x => x.SessionId)
-                .OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.UpdatedAt).HasColumnName("thoi_diem_cap_nhat");
         });
 
         modelBuilder.Entity<UsageEvent>(entity =>
@@ -139,6 +121,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.EventType).HasColumnName("loai_su_kien");
             entity.Property(x => x.Language).HasColumnName("ngon_ngu");
             entity.Property(x => x.OccurredAt).HasColumnName("thoi_diem");
+            entity.Property(x => x.RouteId).HasColumnName("lo_trinh_id");
+            entity.Property(x => x.EventId).HasColumnName("event_id");
+            entity.Property(x => x.GuestId).HasColumnName("guest_id");
+            entity.HasIndex(x => x.EventId).IsUnique().HasFilter("[event_id] IS NOT NULL");
+            entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(x => x.PointOfInterest)
                 .WithMany(x => x.UsageEvents)
@@ -155,6 +142,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Component).HasColumnName("thanh_phan");
             entity.Property(x => x.Level).HasColumnName("muc_do");
             entity.Property(x => x.Message).HasColumnName("thong_diep");
+            entity.Property(x => x.PointOfInterestId).HasColumnName("poi_id");
+            entity.Property(x => x.Language).HasColumnName("ngon_ngu").HasMaxLength(35);
+            entity.Property(x => x.JobId).HasColumnName("job_id");
+            entity.Property(x => x.Stage).HasColumnName("buoc").HasMaxLength(32);
+            entity.Property(x => x.ErrorCode).HasColumnName("ma_loi").HasMaxLength(80);
             entity.Property(x => x.OccurredAt).HasColumnName("thoi_diem");
 
             entity.HasOne(x => x.User)

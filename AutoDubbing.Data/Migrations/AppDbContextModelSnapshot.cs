@@ -92,10 +92,20 @@ namespace AutoDubbing.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("poi_id");
 
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("context_version");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("trang_thai");
+
+                    b.Property<string>("TextHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("text_hash");
 
                     b.HasKey("Id");
 
@@ -121,6 +131,11 @@ namespace AutoDubbing.Data.Migrations
                     b.Property<int>("PointOfInterestId")
                         .HasColumnType("int")
                         .HasColumnName("poi_id");
+
+                    b.Property<string>("SourceVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("context_version");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -214,6 +229,20 @@ namespace AutoDubbing.Data.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("thanh_phan");
 
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("ma_loi");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(35)
+                        .HasColumnType("nvarchar(35)")
+                        .HasColumnName("ngon_ngu");
+
                     b.Property<string>("Level")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
@@ -227,6 +256,15 @@ namespace AutoDubbing.Data.Migrations
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("thoi_diem");
+
+                    b.Property<int?>("PointOfInterestId")
+                        .HasColumnType("int")
+                        .HasColumnName("poi_id");
+
+                    b.Property<string>("Stage")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("buoc");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int")
@@ -258,55 +296,18 @@ namespace AutoDubbing.Data.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("danh_sach_poi");
 
-                    b.Property<int>("SessionId")
-                        .HasColumnType("int")
-                        .HasColumnName("session_id");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("trang_thai");
 
-                    b.HasKey("Id");
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("thoi_diem_cap_nhat");
 
-                    b.HasIndex("SessionId");
+                    b.HasKey("Id");
 
                     b.ToTable("LO_TRINH", (string)null);
-                });
-
-            modelBuilder.Entity("AutoDubbing.Data.Entities.TourSession", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("mo_ta");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("ten");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("trang_thai");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("nguoi_dung_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("SESSION", (string)null);
                 });
 
             modelBuilder.Entity("AutoDubbing.Data.Entities.UsageEvent", b =>
@@ -318,10 +319,18 @@ namespace AutoDubbing.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("event_id");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("loai_su_kien");
+
+                    b.Property<Guid?>("GuestId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("guest_id");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -332,13 +341,23 @@ namespace AutoDubbing.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("thoi_diem");
 
-                    b.Property<int>("PointOfInterestId")
+                    b.Property<int?>("PointOfInterestId")
                         .HasColumnType("int")
                         .HasColumnName("poi_id");
 
+                    b.Property<int?>("RouteId")
+                        .HasColumnType("int")
+                        .HasColumnName("lo_trinh_id");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasFilter("[event_id] IS NOT NULL");
+
                     b.HasIndex("PointOfInterestId");
+
+                    b.HasIndex("RouteId");
 
                     b.ToTable("SU_KIEN_SU_DUNG", (string)null);
                 });
@@ -386,44 +405,26 @@ namespace AutoDubbing.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AutoDubbing.Data.Entities.TourRoute", b =>
-                {
-                    b.HasOne("AutoDubbing.Data.Entities.TourSession", "Session")
-                        .WithMany("Routes")
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("Session");
-                });
-
-            modelBuilder.Entity("AutoDubbing.Data.Entities.TourSession", b =>
-                {
-                    b.HasOne("AutoDubbing.Data.Entities.AdminUser", "User")
-                        .WithMany("Sessions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("AutoDubbing.Data.Entities.UsageEvent", b =>
                 {
                     b.HasOne("AutoDubbing.Data.Entities.PointOfInterest", "PointOfInterest")
                         .WithMany("UsageEvents")
                         .HasForeignKey("PointOfInterestId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("AutoDubbing.Data.Entities.TourRoute", "Route")
+                        .WithMany()
+                        .HasForeignKey("RouteId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("PointOfInterest");
+
+                    b.Navigation("Route");
                 });
 
             modelBuilder.Entity("AutoDubbing.Data.Entities.AdminUser", b =>
                 {
                     b.Navigation("PointsOfInterest");
-
-                    b.Navigation("Sessions");
 
                     b.Navigation("SystemLogs");
                 });
@@ -435,11 +436,6 @@ namespace AutoDubbing.Data.Migrations
                     b.Navigation("Translations");
 
                     b.Navigation("UsageEvents");
-                });
-
-            modelBuilder.Entity("AutoDubbing.Data.Entities.TourSession", b =>
-                {
-                    b.Navigation("Routes");
                 });
 #pragma warning restore 612, 618
         }

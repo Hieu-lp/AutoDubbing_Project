@@ -1,5 +1,30 @@
 # Tuyến đi bộ OpenRouteService cho backend
 
+## Lộ trình gợi ý độc lập (27/10/2026)
+
+`LO_TRINH` không còn Session cha hay `session_id`. Admin quản lý bằng
+`GET/POST /api/admin/routes`, `PUT/DELETE /api/admin/routes/{id}` (JWT Admin
+Active). Tên, mảng ID POI theo thứ tự, trạng thái Published/Hidden được lưu
+SQL. Xóa mềm giữ lịch sử sử dụng, không xóa POI. Không xuất bản được lộ trình
+chứa ID trùng, không tồn tại hoặc POI ẩn.
+
+Khách đọc `GET /api/routes`: chỉ route Published có đủ POI công khai/hợp lệ.
+Chọn **Lộ trình gợi ý** trên web rồi dùng vị trí GPS hoặc điểm xuất phát đã
+chọn. `POST /api/routes/{id}/preview` nhận startLatitude/startLongitude; server
+tự đọc danh sách POI đã lưu, gọi cùng ORS provider và **giữ thứ tự admin**
+(`algorithm=adminOrder`). Nếu route thay đổi trong lúc tính đường, trả 409;
+nếu đã ẩn/xóa hoặc POI không còn công khai, không trả preview hợp lệ.
+
+Khách tự chọn POI vẫn dùng `POST /api/routes/preview`: sắp xếp nearest-neighbor
+theo khoảng cách Haversine rồi lấy đường phố từ ORS. Đây là heuristic, không
+cam kết tìm tối ưu toàn cục. Không vẽ đường giả khi provider lỗi.
+
+Danh sách gợi ý đọc lại mỗi lần mở, khi focus và mỗi 10 giây khi đang mở/đã
+chọn. Đổi tên/thứ tự được phản ánh; đường cũ bị gỡ và có hướng dẫn tính lại.
+Ẩn/xóa hoặc POI mất công khai xóa lựa chọn/đường cũ và thông báo rõ. Không
+cần WebSocket hoặc xóa cache trình duyệt. Sự kiện route_selection chỉ gửi
+sau khi tạo đường thành công; lỗi thống kê không cản hiển thị đường.
+
 `POST /api/routes/preview` được cập nhật để trả tuyến đi bộ `foot-walking` từ OpenRouteService (ORS), sử dụng dữ liệu OpenStreetMap. Đây là hợp đồng hiện tại; response `straightLine` và kết quả 39/39 HTTP ở giai đoạn trước không chứng minh tuyến ORS đã được kiểm tra. Không triển khai frontend, không đổi schema, không ghi dữ liệu dự án và không thêm package.
 
 ## Điểm xuất phát và thứ tự ghé

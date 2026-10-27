@@ -8,7 +8,7 @@ public sealed class RoutePreviewService(IPoiReadRepository repository, IWalkingR
     : IRoutePreviewService
 {
     public async Task<RoutePreviewResult> PreviewAsync(double startLatitude, double startLongitude,
-        int[] poiIds, CancellationToken cancellationToken)
+        int[] poiIds, CancellationToken cancellationToken, bool preserveOrder = false)
     {
         if (!GeoMath.IsLatitude(startLatitude) || !GeoMath.IsLongitude(startLongitude)
             || poiIds.Length is < 1 or > OrsDirectionsOptions.MaxPoiCount
@@ -35,7 +35,7 @@ public sealed class RoutePreviewService(IPoiReadRepository repository, IWalkingR
                 cancellationToken.ThrowIfCancellationRequested();
                 var poi = remaining[index];
                 var distance = GeoMath.DistanceMeters(latitude, longitude, poi.Latitude, poi.Longitude);
-                if (distance < bestDistance || distance == bestDistance && poi.Id < remaining[bestIndex].Id)
+                if (preserveOrder ? poi.Id == poiIds[ordered.Count] : distance < bestDistance || distance == bestDistance && poi.Id < remaining[bestIndex].Id)
                 {
                     bestIndex = index;
                     bestDistance = distance;
@@ -59,6 +59,6 @@ public sealed class RoutePreviewService(IPoiReadRepository repository, IWalkingR
         var stops = ordered.Select((poi, index) => new RouteStopDto(index + 1, poi.Id, poi.Name,
             poi.Latitude, poi.Longitude, route.Legs[index].DistanceMeters, route.Legs[index].DurationSeconds)).ToArray();
         return new RoutePreviewResult(new RoutePreviewDto(start, stops, route.DistanceMeters,
-            route.DurationSeconds, route.Geometry), []);
+            route.DurationSeconds, route.Geometry, Algorithm: preserveOrder ? "adminOrder" : "nearestNeighbor"), []);
     }
 }

@@ -1,0 +1,80 @@
+{
+  "credentials": {
+    "username": "admin",
+    "password": "admin123"
+  },
+  "admin": {
+    "id": 1,
+    "username": "admin",
+    "fullName": "VoiceMap Demo",
+    "status": "Active"
+  },
+  "pois": [
+    {
+      "id": 1,
+      "name": "Nhà thờ Đức Bà Sài Gòn",
+      "latitude": 10.7798,
+      "longitude": 106.699,
+      "proximityRadius": 80,
+      "thumbnailUrl": null,
+      "originalDescription": "Công trình kiến trúc biểu tượng giữa trung tâm Thành phố Hồ Chí Minh.",
+      "originalLanguage": "vi",
+      "status": "Published"
+    },
+    {
+      "id": 2,
+      "name": "Bưu điện Trung tâm Sài Gòn",
+      "latitude": 10.7798,
+      "longitude": 106.6997,
+      "proximityRadius": 60,
+      "thumbnailUrl": null,
+      "originalDescription": "Tòa nhà bưu điện lịch sử với kiến trúc Pháp đặc trưng.",
+      "originalLanguage": "vi",
+      "status": "Published"
+    },
+    {
+      "id": 3,
+      "name": "Independence Palace",
+      "latitude": 10.777,
+      "longitude": 106.6953,
+      "proximityRadius": 100,
+      "thumbnailUrl": null,
+      "originalDescription": "A landmark building and an important part of Vietnam's modern history.",
+      "originalLanguage": "en",
+      "status": "Published"
+    },
+    {
+      "id": 4,
+      "name": "Chợ Bến Thành",
+      "latitude": 10.7724,
+      "longitude": 106.698,
+      "proximityRadius": 75,
+      "thumbnailUrl": null,
+      "originalDescription": "Chợ truyền thống nổi tiếng với ẩm thực và các mặt hàng địa phương.",
+      "originalLanguage": "vi",
+      "status": "Hidden"
+    },
+    {
+      "id": 5,
+      "name": "Bảo tàng Thành phố Hồ Chí Minh",
+      "latitude": 10.7766,
+      "longitude": 106.7009,
+      "proximityRadius": 65,
+      "thumbnailUrl": null,
+      "originalDescription": "Bản nháp giới thiệu lịch sử và văn hóa của thành phố.",
+      "originalLanguage": "vi",
+      "status": "Hidden"
+    },
+    {
+      "id": 6,
+      "name": "阮惠步行街",
+      "latitude": 10.7741,
+      "longitude": 106.7038,
+      "proximityRadius": 50,
+      "thumbnailUrl": null,
+      "originalDescription": "胡志明市中心热闹的步行街。",
+      "originalLanguage": "zh-hans",
+      "status": "Published"
+    }
+  ]
+}

@@ -13,8 +13,6 @@ public class AdminUser
 
     public ICollection<PointOfInterest> PointsOfInterest { get; set; }
         = new List<PointOfInterest>();
-    public ICollection<TourSession> Sessions { get; set; }
-        = new List<TourSession>();
     public ICollection<SystemLog> SystemLogs { get; set; }
         = new List<SystemLog>();
 }
