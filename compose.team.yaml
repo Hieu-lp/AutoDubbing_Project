@@ -23,8 +23,8 @@ services:
     restart: unless-stopped
 
   api:
-    image: autodubbing-api:dev
-    pull_policy: never
+    image: ghcr.io/hieu-lp/autodubbing-api:develop
+    pull_policy: always
     env_file:
       - path: ./.env.api.team
         format: raw
@@ -46,11 +46,8 @@ services:
     restart: unless-stopped
 
   user-web:
-    image: autodubbing-user-web:dev
-    pull_policy: never
-    build:
-      context: .
-      dockerfile: fe-user-web/Dockerfile.team
+    image: ghcr.io/hieu-lp/autodubbing-user-web:develop
+    pull_policy: always
     depends_on:
       api:
         condition: service_started
