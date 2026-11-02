@@ -1,5 +1,9 @@
 # Frontend user web trong Docker — bước tích hợp local
 
+Quy trình tự nhận image và triển khai trên từng máy nằm trong [hướng dẫn CD](team-cd.md).
+Sau khi nhận diện môi trường bằng bộ cập nhật CD, dùng lệnh `start` của bộ cập
+nhật để mở đúng bản đã lưu; các lệnh build local bên dưới dành cho kiểm tra local.
+
 ## Cập nhật tích hợp 7 thực thể (27/10/2026)
 
 Source mới có lộ trình gợi ý, quản lý tài khoản, sự kiện nghe và nhật ký SQL;
