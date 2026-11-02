@@ -14,6 +14,9 @@ on:
       - main
       - develop
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -33,6 +36,9 @@ jobs:
       - name: Chạy kiểm thử backend trên database tách biệt
         run: dotnet test AutoDubbing.Tests/AutoDubbing.Tests.csproj --configuration Release --no-build --no-restore
 
+      - name: Kiểm thử bộ cập nhật CD và rollback
+        run: python3 -m unittest discover -s scripts/cd/tests -v
+
       - name: Kiểm tra đóng gói Docker
         run: docker build -t autodubbing-api .
 
@@ -44,6 +50,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    concurrency:
+      group: autodubbing-release-develop
+      cancel-in-progress: false
     steps:
       - name: Tải mã nguồn về máy chủ
         uses: actions/checkout@v4
@@ -55,18 +64,81 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Thiết lập Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Xác định registry của repository
+        id: registry
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "prefix=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build và publish API image
+        id: api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/hieu-lp/autodubbing-api:develop
+          tags: ${{ steps.registry.outputs.prefix }}/autodubbing-api:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Build và publish User Web image
+        id: web
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./fe-user-web/Dockerfile.team
           push: true
-          tags: ghcr.io/hieu-lp/autodubbing-user-web:develop
+          tags: ${{ steps.registry.outputs.prefix }}/autodubbing-user-web:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Chuẩn bị manifest sau khi cả hai image thành công
+        env:
+          PREFIX: ${{ steps.registry.outputs.prefix }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+          REVISION: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 scripts/cd/create_release.py \
+            --revision "$REVISION" --run-number "$RUN_NUMBER" --run-attempt "$RUN_ATTEMPT" \
+            --api-image "$PREFIX/autodubbing-api@$API_DIGEST" \
+            --web-image "$PREFIX/autodubbing-user-web@$WEB_DIGEST" \
+            --out "$RUNNER_TEMP/autodubbing-release"
+
+      - name: Không quảng bá lại commit cũ khi develop đã tiến lên
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          current_develop="$(git ls-remote --exit-code origin refs/heads/develop | cut -f1)"
+          if [[ "$current_develop" != "$REVISION" ]]; then
+            echo "::error::develop has advanced; refusing to replace the release channel with this older commit."
+            exit 1
+          fi
+
+      - name: Cập nhật tag develop tương thích Compose cũ
+        env:
+          PREFIX: ${{ steps.registry.outputs.prefix }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+        run: |
+          docker buildx imagetools create --tag "$PREFIX/autodubbing-api:develop" "$PREFIX/autodubbing-api@$API_DIGEST"
+          docker buildx imagetools create --tag "$PREFIX/autodubbing-user-web:develop" "$PREFIX/autodubbing-user-web@$WEB_DIGEST"
+
+      - name: Công bố kênh CD sau cùng
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/autodubbing-release
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.prefix }}/autodubbing-release:sha-${{ github.sha }}
+            ${{ steps.registry.outputs.prefix }}/autodubbing-release:develop
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}

@@ -13,3 +13,20 @@
 
 **/*.pfx
 **/*.bak
+# Local credentials, private keys, database files and diagnostics never enter builds.
+**/secrets.json
+**/*secrets*.json
+**/appsettings.Local.json
+**/appsettings.*.local.json
+**/*.key
+**/*.pem
+**/*.p12
+**/*.p8
+**/*.user
+**/*.suo
+**/*.mdf
+**/*.ldf
+**/*.ndf
+**/diagnostics
+**/playwright-report
+**/test-results
