@@ -19,15 +19,20 @@ import AdminDashboard from './AdminDashboard';
 import { TranslationAudioPage } from './AdminWorkflowPages';
 import { AdminAccountsPage, AdminHistoryPage, AdminRoutesPage } from './AdminManagementPages';
 import { useQueryClient } from '@tanstack/react-query';
+import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 type Notice = { kind: 'success' | 'error'; text: string };
 type Filter = 'all' | 'published' | 'hidden';
 type AdminSection = 'overview' | 'places' | 'pipeline' | 'routes' | 'accounts' | 'usage' | 'logs';
+type PoiFormState = Omit<AdminPoiInput, 'latitude' | 'longitude'> & {
+  latitude: number | null;
+  longitude: number | null;
+};
 
-const emptyForm: AdminPoiInput = {
+const emptyForm: PoiFormState = {
   name: '',
-  latitude: 10.7769,
-  longitude: 106.7009,
+  latitude: null,
+  longitude: null,
   proximityRadius: 50,
   thumbnailUrl: null,
   originalDescription: '',
@@ -113,13 +118,92 @@ function LoginScreen({ onLogin }: { onLogin: (username: string, password: string
   );
 }
 
+const poiMapDefaultCenter: [number, number] = [10.7769, 106.7009];
+
+function PoiMapClickHandler({ onPick }: { onPick: (latitude: number, longitude: number) => void }) {
+  useMapEvents({
+    click(event) {
+      onPick(event.latlng.lat, event.latlng.lng);
+    },
+  });
+
+  return null;
+}
+
+function PoiMapKeyboardZoom() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    let pointerInside = false;
+    const onPointerEnter = () => { pointerInside = true; };
+    const onPointerLeave = () => { pointerInside = false; };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!pointerInside || !event.ctrlKey || event.altKey || event.metaKey) return;
+
+      const zoomIn = event.key === '+' || event.key === 'Add' || event.code === 'NumpadAdd'
+        || (event.key === '=' && event.shiftKey);
+      const zoomOut = event.key === '-' || event.key === 'Subtract' || event.code === 'NumpadSubtract'
+        || event.code === 'Minus';
+      if (!zoomIn && !zoomOut) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (zoomIn) map.zoomIn();
+      else map.zoomOut();
+    };
+
+    container.addEventListener('pointerenter', onPointerEnter);
+    container.addEventListener('pointerleave', onPointerLeave);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      container.removeEventListener('pointerenter', onPointerEnter);
+      container.removeEventListener('pointerleave', onPointerLeave);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [map]);
+
+  return null;
+}
+
+function PoiLocationPicker({
+  latitude,
+  longitude,
+  onPick,
+}: {
+  latitude: number | null;
+  longitude: number | null;
+  onPick: (latitude: number, longitude: number) => void;
+}) {
+  const hasPoint = latitude !== null && longitude !== null;
+  const center: [number, number] = hasPoint ? [latitude, longitude] : poiMapDefaultCenter;
+
+  return (
+    <MapContainer center={center} zoom={hasPoint ? 15 : 12} scrollWheelZoom={false} className="admin-poi-map">
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <PoiMapKeyboardZoom />
+      <PoiMapClickHandler onPick={onPick} />
+      {hasPoint && (
+        <CircleMarker
+          center={[latitude, longitude]}
+          radius={9}
+          pathOptions={{ color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}
+        />
+      )}
+    </MapContainer>
+  );
+}
+
 function PoiModal({ poi, saving, onClose, onSave }: {
   poi: AdminPoi | null;
   saving: boolean;
   onClose: () => void;
   onSave: (input: AdminPoiInput) => Promise<void>;
 }) {
-  const [form, setForm] = useState<AdminPoiInput>(poi ? {
+  const [form, setForm] = useState<PoiFormState>(poi ? {
     name: poi.name,
     latitude: poi.latitude,
     longitude: poi.longitude,
@@ -131,15 +215,21 @@ function PoiModal({ poi, saving, onClose, onSave }: {
   } : emptyForm);
   const [error, setError] = useState('');
 
-  function update<K extends keyof AdminPoiInput>(key: K, value: AdminPoiInput[K]) {
+  function update<K extends keyof PoiFormState>(key: K, value: PoiFormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+    const { latitude, longitude, ...details } = form;
+    if (latitude === null || longitude === null) {
+      setError('Hãy chọn vị trí của địa điểm trên bản đồ.');
+      return;
+    }
+
     try {
-      await onSave({ ...form, thumbnailUrl: form.thumbnailUrl?.trim() || null });
+      await onSave({ ...details, latitude, longitude, thumbnailUrl: form.thumbnailUrl?.trim() || null });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể lưu địa điểm.');
     }
@@ -155,8 +245,22 @@ function PoiModal({ poi, saving, onClose, onSave }: {
         <form onSubmit={submit}>
           <div className="admin-form-grid">
             <label className="admin-field admin-field-wide">Tên địa điểm<input autoFocus maxLength={200} required value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="Ví dụ: Nhà thờ Đức Bà" /></label>
-            <label className="admin-field">Vĩ độ<input required type="number" min={-90} max={90} step="any" value={form.latitude} onChange={(event) => update('latitude', Number(event.target.value))} /></label>
-            <label className="admin-field">Kinh độ<input required type="number" min={-180} max={180} step="any" value={form.longitude} onChange={(event) => update('longitude', Number(event.target.value))} /></label>
+            <div className="admin-field admin-field-wide admin-poi-location-field">
+              <span className="admin-poi-location-label">Vị trí địa điểm</span>
+              <span className="admin-field-help">Nhấp vào bản đồ để đặt hoặc đổi vị trí ghim. Đưa chuột vào bản đồ rồi nhấn Ctrl + hoặc Ctrl - để phóng to, thu nhỏ.</span>
+              <PoiLocationPicker
+                latitude={form.latitude}
+                longitude={form.longitude}
+                onPick={(latitude, longitude) => {
+                  setForm((current) => ({ ...current, latitude, longitude }));
+                  setError('');
+                }}
+              />
+              <div className="admin-poi-coordinate-grid" aria-live="polite">
+                <label className="admin-field">Vĩ độ<input readOnly value={form.latitude?.toFixed(6) ?? ''} placeholder="Chọn điểm trên bản đồ" /></label>
+                <label className="admin-field">Kinh độ<input readOnly value={form.longitude?.toFixed(6) ?? ''} placeholder="Chọn điểm trên bản đồ" /></label>
+              </div>
+            </div>
             <label className="admin-field">Bán kính kích hoạt (m)<input required type="number" min={1} max={10000} value={form.proximityRadius} onChange={(event) => update('proximityRadius', Number(event.target.value))} /></label>
             <label className="admin-field">Ngôn ngữ gốc<select value={form.originalLanguage} onChange={(event) => update('originalLanguage', event.target.value)}><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="zh-hans">中文（简体）</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="es">Español</option></select></label>
             <label className="admin-field admin-field-wide">Ảnh đại diện <span className="admin-field-optional">(không bắt buộc)</span><input type="url" maxLength={2048} value={form.thumbnailUrl ?? ''} onChange={(event) => update('thumbnailUrl', event.target.value)} placeholder="https://example.com/anh-dia-diem.jpg" /></label>
@@ -164,7 +268,7 @@ function PoiModal({ poi, saving, onClose, onSave }: {
             <label className="admin-field admin-field-wide">Trạng thái<select value={form.status} onChange={(event) => update('status', event.target.value as AdminPoiInput['status'])}><option value="Published">Đã xuất bản</option><option value="Hidden">Ẩn</option></select><span className="admin-field-help">Địa điểm ẩn sẽ không xuất hiện trên bản đồ dành cho khách.</span></label>
           </div>
           {error && <div className="admin-alert admin-alert-error" role="alert">{error}</div>}
-          <footer className="admin-modal-footer"><button className="admin-button admin-button-secondary" type="button" onClick={onClose} disabled={saving}>Hủy</button><button className="admin-button admin-button-primary" type="submit" disabled={saving}>{saving ? 'Đang lưu…' : poi ? 'Lưu thay đổi' : 'Tạo địa điểm'}</button></footer>
+          <footer className="admin-modal-footer"><button className="admin-button admin-button-secondary" type="button" onClick={onClose} disabled={saving}>Hủy</button><button className="admin-button admin-button-primary" type="submit" disabled={saving || form.latitude === null || form.longitude === null}>{saving ? 'Đang lưu…' : poi ? 'Lưu thay đổi' : 'Tạo địa điểm'}</button></footer>
         </form>
       </section>
     </div>
