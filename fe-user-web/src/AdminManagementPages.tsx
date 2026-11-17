@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminRequest, useAdminMockData, type AdminPoi, type AdminProfile } from './services/adminPoiService';
 import type { SavedRoute } from './types';
+import { calculateRouteDistances, formatRouteDistance } from './services/routeService';
 
 export function AdminRoutesPage({ token, pois }: { token: string; pois: AdminPoi[] }) {
   const client = useQueryClient();
@@ -9,6 +10,9 @@ export function AdminRoutesPage({ token, pois }: { token: string; pois: AdminPoi
   const [editing, setEditing] = useState<number | null>(null);
   const [name, setName] = useState(''); const [ids, setIds] = useState(''); const [status, setStatus] = useState('Hidden');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const routeDistances = ids.trim()
+    ? calculateRouteDistances(ids.split(',').map(value => Number(value.trim())), pois)
+    : null;
   function clear() { setEditing(null); setName(''); setIds(''); setStatus('Hidden'); setError(''); }
   async function save(event: FormEvent) {
     event.preventDefault(); setError('');
@@ -36,6 +40,13 @@ export function AdminRoutesPage({ token, pois }: { token: string; pois: AdminPoi
       <label className="admin-field">Tên lộ trình<input value={name} onChange={event => setName(event.target.value)} required maxLength={200} /></label>
       <label className="admin-field">Trạng thái lộ trình<select value={status} onChange={event => setStatus(event.target.value)}><option value="Hidden">Ẩn</option><option value="Published">Xuất bản</option></select></label>
       <label className="admin-field admin-field-wide">ID POI theo thứ tự, cách nhau bằng dấu phẩy<input value={ids} onChange={event => setIds(event.target.value)} required placeholder="Ví dụ: 2,1,3" /></label>
+      {routeDistances && <div className="admin-field-wide">
+        {routeDistances.legs.map(leg => <p key={`${leg.from.id}-${leg.to.id}`}>
+          {leg.from.name} → {leg.to.name}: {formatRouteDistance(leg.distanceMeters)}
+        </p>)}
+        <strong>Tổng khoảng cách giữa các POI: {formatRouteDistance(routeDistances.totalDistanceMeters)}</strong>
+        <small> Khoảng cách đường chim bay.</small>
+      </div>}
       <p className="admin-field-wide">{pois.map(poi => `${poi.id}: ${poi.name}${poi.status === 'Hidden' ? ' (ẩn)' : ''}`).join(' · ')}</p>
       <div className="admin-management-actions"><button className="admin-button admin-button-primary" disabled={busy}>{editing === null ? 'Tạo lộ trình' : 'Lưu lộ trình'}</button><button type="button" className="admin-button admin-button-secondary" onClick={clear}>Nhập mới</button></div>
     </form>
