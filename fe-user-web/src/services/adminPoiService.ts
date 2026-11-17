@@ -3,6 +3,8 @@ export interface AdminProfile {
   username: string;
   fullName: string;
   status: string;
+  passwordChangeDueAtUtc?: string | null;
+  passwordChangeRequired?: boolean;
 }
 
 export interface AdminLoginResponse {
@@ -161,6 +163,13 @@ export async function getAdminProfile(token: string): Promise<AdminProfile> {
     return (await getMockData()).admin;
   }
   return request<AdminProfile>('/api/admin/auth/me', token);
+}
+
+export async function changeAdminPassword(token: string, currentPassword: string, newPassword: string): Promise<AdminProfile> {
+  return request<AdminProfile>('/api/admin/auth/change-password', token, {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }
 
 export async function getAdminPois(token: string): Promise<AdminPoi[]> {

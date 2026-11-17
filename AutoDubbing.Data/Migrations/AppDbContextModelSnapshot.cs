@@ -36,6 +36,15 @@ namespace AutoDubbing.Data.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("ho_ten");
 
+                    b.Property<DateTimeOffset>("PasswordChangedAtUtc")
+                        .HasColumnType("datetimeoffset")
+                        .HasColumnName("mat_khau_doi_luc_utc");
+
+                    b.Property<string>("PasswordHistoryJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("lich_su_mat_khau");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")

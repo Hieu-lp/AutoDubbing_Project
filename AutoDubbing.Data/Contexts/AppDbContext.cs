@@ -35,6 +35,8 @@ public class AppDbContext : DbContext
                 .UseCollation("Latin1_General_100_BIN2");
             entity.HasIndex(x => x.Username).IsUnique();
             entity.Property(x => x.PasswordHash).HasColumnName("mat_khau_hash");
+            entity.Property(x => x.PasswordChangedAtUtc).HasColumnName("mat_khau_doi_luc_utc");
+            entity.Property(x => x.PasswordHistoryJson).HasColumnName("lich_su_mat_khau");
             entity.Property(x => x.FullName).HasColumnName("ho_ten");
             entity.Property(x => x.Status).HasColumnName("trang_thai").HasMaxLength(6);
         });

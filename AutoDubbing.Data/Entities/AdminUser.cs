@@ -8,6 +8,8 @@ public class AdminUser
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    public DateTimeOffset PasswordChangedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public string PasswordHistoryJson { get; set; } = "[]";
     public string FullName { get; set; } = string.Empty;
     public string Status { get; set; } = AdminAccountStatus.Active;
 
