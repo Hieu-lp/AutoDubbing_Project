@@ -216,3 +216,9 @@
 .admin-management-card h2{margin:0;font-size:16px}
 .admin-management-actions{display:flex;flex-wrap:wrap;gap:8px}
 .admin-management [role=alert]{color:#a12b25}
+.admin-usage-statistics{display:flex;flex-direction:column;gap:14px;min-width:0}
+.admin-usage-statistics h2,.admin-usage-statistics h3{margin:0}
+.admin-usage-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.admin-usage-summary strong{display:block;margin-top:8px;font-size:20px;color:#354154}
+.admin-usage-table th,.admin-usage-table td{padding:12px;border-bottom:1px solid var(--admin-line)}
+@media(max-width:600px){.admin-usage-summary{grid-template-columns:1fr}}
