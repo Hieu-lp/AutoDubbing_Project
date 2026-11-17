@@ -78,7 +78,7 @@ function StoredTranslationAudioPage({ pois, token }: { pois: AdminPoi[]; token: 
   }
   return <section className="workflow-page" aria-label="Bản dịch và audio">
     <audio ref={player.ref} preload="none" aria-label="Audio thuyết minh đã lưu" />
-    <div className="workflow-intro"><p>Đọc nội dung đã lưu và tạo phần còn thiếu qua pipeline hiện có.</p><span className="workflow-data-tag">SQL / API</span></div>
+    <div className="workflow-intro"><p>Đọc nội dung đã lưu và tạo phần còn thiếu qua pipeline hiện có </p><span className="workflow-data-tag">SQL / API</span></div>
     <div className="workflow-editor-layout">
       <aside className="workflow-list-card">
         <div className="workflow-card-heading"><div><h2>Địa điểm</h2><p>{pois.length} POI</p></div></div>

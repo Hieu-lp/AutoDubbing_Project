@@ -275,7 +275,20 @@ export default function App() {
                   {routePois.map((poi, index) => <div className="route-stop" key={poi.id}><span className="route-stop-number">{String(index + 1).padStart(2, '0')}</span><span className="route-stop-name">{poi.name}</span><button onClick={() => toggleRoutePoi(poi.id)} aria-label={language === 'vi' ? `Bỏ ${poi.name} khỏi lộ trình` : `Remove ${poi.name} from route`}><Icon name="close" size={15} /></button></div>)}
                 </div>
                 <div className="route-poi-picker"><div className="route-picker-title">{language === 'vi' ? 'CHỌN ĐIỂM THAM QUAN' : 'CHOOSE PLACES'}</div>{pois.map((poi) => { const included = routePoiIds.includes(poi.id); return <button type="button" key={poi.id} className={`route-choice ${included ? 'route-choice-selected' : ''}`} onClick={() => toggleRoutePoi(poi.id)} aria-pressed={included}><span className="route-check">{included ? '✓' : '+'}</span><span>{poi.name}</span></button>; })}</div>
-                {walkingRoute && <div className="route-result" role="status"><b>{language === 'vi' ? 'Đã tạo tuyến đi bộ' : 'Walking route ready'}</b><span>{formatDistance(walkingRoute.distanceMeters, language === 'en')} · {Math.max(1, Math.round(walkingRoute.durationSeconds / 60))} {language === 'vi' ? 'phút đi bộ' : 'min walk'}</span><small>{walkingRoute.attribution}</small></div>}
+                {walkingRoute && <div className="route-result" role="status">
+                  <b>{language === 'vi' ? 'Đã tạo tuyến đi bộ' : 'Walking route ready'}</b>
+                  <ol>{walkingRoute.stops.map((stop, index) => <li key={stop.poiId}>
+                    {index === 0 ? (language === 'vi' ? 'Vị trí xuất phát' : 'Starting location') : walkingRoute.stops[index - 1].name}
+                    {' → '}{stop.name}: <strong>{formatDistance(stop.distanceFromPreviousMeters, language === 'en')}</strong>
+                  </li>)}</ol>
+                  <span>{language === 'vi' ? 'Tổng giữa các POI: ' : 'Total between POIs: '}
+                    {formatDistance(walkingRoute.stops.slice(1).reduce((total, stop) => total + stop.distanceFromPreviousMeters, 0), language === 'en')}
+                  </span>
+                  <span>{language === 'vi' ? 'Tổng lộ trình từ vị trí xuất phát: ' : 'Total route from starting location: '}
+                    {formatDistance(walkingRoute.distanceMeters, language === 'en')} · {Math.max(1, Math.round(walkingRoute.durationSeconds / 60))} {language === 'vi' ? 'phút đi bộ' : 'min walk'}
+                  </span>
+                  <small>{walkingRoute.attribution}</small>
+                </div>}
                 {routeError && <div className="route-error" role="alert">{routeError}</div>}
                 <button className="route-submit" onClick={() => void buildRoute()} disabled={routeLoading || (!savedRoute && routePoiIds.length < 2)}><Icon name="route" size={17} />{routeLoading ? (language === 'vi' ? 'Đang tính đường…' : 'Finding route…') : walkingRoute ? (language === 'vi' ? 'Cập nhật lộ trình' : 'Update route') : (language === 'vi' ? `Tạo lộ trình (${routePoiIds.length})` : `Create route (${routePoiIds.length})`)}</button>
                 {!walkingRoute && !routeError && routePoiIds.length < 2 && <small className="route-validation">{language === 'vi' ? 'Chọn thêm ít nhất một điểm nữa.' : 'Choose at least one more place.'}</small>}
