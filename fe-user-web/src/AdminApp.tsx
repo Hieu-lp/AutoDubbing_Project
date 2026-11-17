@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   AdminApiError,
+  changeAdminPassword,
   clearAdminToken,
   createAdminPoi,
   deleteAdminPoi,
@@ -275,6 +276,62 @@ function PoiModal({ poi, saving, onClose, onSave }: {
   );
 }
 
+function AdminPasswordReminder({ token, admin, onChanged, onUnauthorized }: {
+  token: string;
+  admin: AdminProfile;
+  onChanged: (profile: AdminProfile) => void;
+  onUnauthorized: () => void;
+}) {
+  const [expired, setExpired] = useState(!!admin.passwordChangeRequired);
+  const [open, setOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const due = admin.passwordChangeDueAtUtc ? new Date(admin.passwordChangeDueAtUtc).getTime() : NaN;
+    const refresh = () => setExpired(!!admin.passwordChangeRequired || Date.now() >= due);
+    refresh();
+    const timer = Number.isFinite(due) && due > Date.now()
+      ? window.setTimeout(refresh, due - Date.now()) : undefined;
+    window.addEventListener('focus', refresh);
+    return () => { window.clearTimeout(timer); window.removeEventListener('focus', refresh); };
+  }, [admin.passwordChangeDueAtUtc, admin.passwordChangeRequired]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    if (newPassword !== confirmation) { setError('Xác nhận mật khẩu mới không khớp.'); return; }
+    if (newPassword === currentPassword) { setError('Mật khẩu mới không được trùng mật khẩu hiện tại.'); return; }
+    setSavingPassword(true);
+    try {
+      const profile = await changeAdminPassword(token, currentPassword, newPassword);
+      setCurrentPassword(''); setNewPassword(''); setConfirmation(''); setOpen(false);
+      onChanged(profile);
+    } catch (cause) {
+      if (cause instanceof AdminApiError && cause.status === 401) onUnauthorized();
+      else setError(cause instanceof Error ? cause.message : 'Không thể đổi mật khẩu.');
+    } finally { setSavingPassword(false); }
+  }
+
+  return <section className="admin-management-card" aria-label="Đổi mật khẩu quản trị">
+    {expired && <p className="admin-alert admin-alert-error" role="alert">
+      Mật khẩu đã được sử dụng quá 24 giờ. Vui lòng đổi mật khẩu mới; không được sử dụng lại bất kỳ mật khẩu cũ nào.
+    </p>}
+    {expired || open ? <form className="admin-form-grid" onSubmit={submit}>
+      <h2 className="admin-field-wide">Đổi mật khẩu admin</h2>
+      <label className="admin-field">Mật khẩu hiện tại<input type="password" autoComplete="current-password" required maxLength={1024} value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} /></label>
+      <label className="admin-field">Mật khẩu mới<input type="password" autoComplete="new-password" required minLength={8} maxLength={1024} value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
+      <label className="admin-field">Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" required minLength={8} maxLength={1024} value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>
+      {error && <p className="admin-field-wide" role="alert">{error}</p>}
+      <button type="submit" className="admin-button admin-button-primary" disabled={savingPassword}>{savingPassword ? 'Đang lưu…' : 'Lưu mật khẩu mới'}</button>
+      {!expired && <button type="button" className="admin-button admin-button-secondary" disabled={savingPassword} onClick={() => { setOpen(false); setCurrentPassword(''); setNewPassword(''); setConfirmation(''); setError(''); }}>Hủy</button>}
+    </form> : <button type="button" className="admin-button admin-button-secondary" onClick={() => setOpen(true)}>Đổi mật khẩu admin</button>}
+  </section>;
+}
+
 export default function AdminApp() {
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
@@ -438,6 +495,10 @@ export default function AdminApp() {
         </header>
 
         <div className="admin-content">
+          {!useAdminMockData && <AdminPasswordReminder key={admin.id} token={token} admin={admin} onUnauthorized={logout} onChanged={profile => {
+            setAdmin(profile);
+            setNotice({ kind: 'success', text: 'Đã đổi mật khẩu. Lần nhắc tiếp theo sau 24 giờ.' });
+          }} />}
           <section className="admin-welcome">
             <div><p className="admin-overline"><span className="admin-overline-dot" /> BẢNG ĐIỀU KHIỂN</p><h1>{sectionDetails[activeSection].title}</h1><p className="admin-page-description">{sectionDetails[activeSection].description}</p></div>
             {activeSection === 'places' && <button className="admin-button admin-button-primary admin-add-button" onClick={() => setModalPoi(null)}><Icon name="plus" size={18} /><span>Thêm địa điểm</span></button>}

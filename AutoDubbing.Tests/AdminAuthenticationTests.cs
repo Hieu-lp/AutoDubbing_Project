@@ -37,14 +37,22 @@ public sealed class AdminAuthenticationTests
         Assert.Equal("Active", response.Admin.Status);
         Assert.InRange(response.ExpiresAtUtc, DateTimeOffset.UtcNow.AddMinutes(29),
             DateTimeOffset.UtcNow.AddMinutes(31));
-        Assert.DoesNotContain("password", await login.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        var loginJson = await login.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("\"password\"", loginJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHash", loginJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHistory", loginJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.Password, loginJson);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", response.AccessToken);
         using var me = await client.GetAsync("/api/admin/auth/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
         Assert.True(me.Headers.CacheControl?.NoStore);
         Assert.Equal(response.Admin, await me.Content.ReadFromJsonAsync<AdminProfile>());
-        Assert.DoesNotContain("password", await me.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        var profileJson = await me.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("\"password\"", profileJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHash", profileJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHistory", profileJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.Password, profileJson);
     }
 
     [Theory]

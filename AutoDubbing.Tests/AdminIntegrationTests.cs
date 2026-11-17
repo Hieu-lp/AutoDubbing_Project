@@ -104,7 +104,10 @@ public sealed class AdminIntegrationTests
         (await client.PutAsJsonAsync("/api/admin/users/1", new { username = "Admin", fullName = "Tên mới", status = "Active" })).EnsureSuccessStatusCode();
         Assert.Equal("Tên mới", (await client.GetFromJsonAsync<AdminProfile>("/api/admin/auth/me"))!.FullName);
         var json = await client.GetStringAsync("/api/admin/users");
-        Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase); Assert.DoesNotContain(factory.Password, json);
+        Assert.DoesNotContain("\"password\"", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHash", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passwordHistory", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.Password, json);
         using var guest = factory.CreateHttpsClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await guest.PostAsJsonAsync("/api/admin/auth/login", new { username = "two", password = factory.Password })).StatusCode);
     }

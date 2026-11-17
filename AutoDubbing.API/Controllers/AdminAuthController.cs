@@ -36,6 +36,24 @@ public sealed class AdminAuthController(IAdminAuthenticationService authenticati
         return Ok(result);
     }
 
+    [HttpPost("change-password")]
+    public async Task<ActionResult<AdminProfile>> ChangePassword(AdminChangePasswordRequest request,
+        [FromServices] AdminAccountService accountService, CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(User.FindFirstValue("sub"), NumberStyles.None, CultureInfo.InvariantCulture,
+                out var adminId)) return Challenge();
+        try
+        {
+            var admin = await accountService.ChangePasswordAsync(adminId, request.CurrentPassword,
+                request.NewPassword, cancellationToken);
+            return admin is null ? Challenge() : Ok(admin);
+        }
+        catch (ArgumentException error)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: error.Message);
+        }
+    }
+
     [HttpGet("me")]
     [ProducesResponseType<AdminProfile>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
